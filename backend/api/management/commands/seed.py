@@ -84,9 +84,17 @@ class Command(BaseCommand):
             project=bathroom, worker_name="Sara Nyström", hours=Decimal("96"),
             hourly_rate=Decimal("600"), note="Plattsättning, mer tid än planerat",
         )
+        CheckIn.objects.create(
+            project=bathroom, worker_name="Sara Nyström", hours=Decimal("44"),
+            hourly_rate=Decimal("600"), note="Extra rivning efter upptäckt fuktskada",
+        )
         MaterialUsage.objects.create(
             project=bathroom, description="Kakel och tätskikt",
             quantity=1, unit="set", unit_cost=Decimal("44500"),
+        )
+        MaterialUsage.objects.create(
+            project=bathroom, description="Extra material – fuktsanering",
+            quantity=1, unit="set", unit_cost=Decimal("7500"),
         )
         AtaItem.objects.create(
             project=bathroom,
