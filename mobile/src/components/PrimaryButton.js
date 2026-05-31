@@ -9,17 +9,18 @@ export default function PrimaryButton({ title, onPress, loading, variant = "prim
     <Pressable
       onPress={onPress}
       disabled={loading}
-      style={({ pressed }) => [
+      style={({ pressed, hovered }) => [
         styles.base,
         isGhost ? styles.ghost : styles.primary,
-        pressed && { opacity: 0.85 },
+        hovered && (isGhost ? styles.ghostHover : styles.primaryHover),
+        pressed && { opacity: 0.88 },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={isGhost ? colors.primary : colors.onPrimary} />
+        <ActivityIndicator color={isGhost ? colors.text : colors.onPrimary} />
       ) : (
-        <Text style={[styles.text, isGhost && { color: colors.primary }]}>{title}</Text>
+        <Text style={[styles.text, isGhost && styles.ghostText]}>{title}</Text>
       )}
     </Pressable>
   );
@@ -27,23 +28,25 @@ export default function PrimaryButton({ title, onPress, loading, variant = "prim
 
 const styles = StyleSheet.create({
   base: {
-    height: 54,
+    height: 52,
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    flexDirection: "row",
   },
-  primary: {
-    backgroundColor: colors.primary,
-  },
+  primary: { backgroundColor: colors.primary },
+  primaryHover: { backgroundColor: "#6b50e0" },
   ghost: {
     backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
+  ghostHover: { backgroundColor: colors.surfaceRaised, borderColor: colors.primary },
   text: {
     color: colors.onPrimary,
     fontSize: font.h3,
     fontWeight: "700",
   },
+  ghostText: { color: colors.text },
 });

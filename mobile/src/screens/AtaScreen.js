@@ -1,13 +1,8 @@
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
+import Screen from "../components/Screen";
 import Card from "../components/Card";
 import Pill from "../components/Pill";
 import PrimaryButton from "../components/PrimaryButton";
@@ -74,10 +69,10 @@ export default function AtaScreen({ route }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen maxWidth={720} onRefresh={load} refreshing={loading}>
       <Text style={styles.intro}>
-        ÄTA-arbete (ändrings-, tilläggs- och avgående arbeten) fångas upp automatiskt och
-        följer en tydlig godkännandekedja.
+        ÄTA-arbete (ändrings-, tilläggs- och avgående arbeten) fångas upp automatiskt och följer
+        en tydlig godkännandekedja.
       </Text>
 
       {items.length === 0 ? (
@@ -87,7 +82,7 @@ export default function AtaScreen({ route }) {
           const nextLabel = NEXT_LABEL[a.status];
           const done = a.status === "customer_approved" || a.status === "rejected";
           return (
-            <Card key={a.id}>
+            <Card key={a.id} style={styles.card}>
               <View style={styles.headRow}>
                 <Text style={styles.title}>{a.title}</Text>
                 <Pill label={a.status_display} tone={toneFor(a.status)} />
@@ -115,19 +110,19 @@ export default function AtaScreen({ route }) {
           );
         })
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  intro: { color: colors.textMuted, fontSize: font.small, marginBottom: spacing.lg, lineHeight: 20 },
+  intro: { color: colors.textMuted, fontSize: font.body, marginBottom: spacing.lg, lineHeight: 22 },
   empty: { color: colors.textFaint, textAlign: "center", marginTop: spacing.xl },
+  card: { marginBottom: spacing.lg },
   headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { color: colors.text, fontSize: font.h3, fontWeight: "700", flex: 1, paddingRight: spacing.md },
-  desc: { color: colors.textMuted, fontSize: font.small, marginTop: spacing.sm, lineHeight: 19 },
-  cost: { color: colors.warning, fontSize: font.h3, fontWeight: "800", marginTop: spacing.md },
+  desc: { color: colors.textMuted, fontSize: font.small, marginTop: spacing.sm, lineHeight: 20 },
+  cost: { color: colors.warning, fontSize: font.h2, fontWeight: "800", marginTop: spacing.md },
   deadline: { color: colors.textFaint, fontSize: font.tiny, marginTop: spacing.sm },
   actions: { marginTop: spacing.lg },
 });

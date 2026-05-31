@@ -1,7 +1,8 @@
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -22,6 +23,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
 
 
+def _to_decimal(value, default="0"):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
+
+
 class ProjectViewSet(viewsets.ModelViewSet):
     queryset = Project.objects.all().order_by("-created_at")
 
@@ -29,6 +37,38 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return ProjectListSerializer
         return ProjectDetailSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a project from a customer name (created on the fly) plus
+        optional initial scope (budget) lines."""
+        data = request.data
+        name = (data.get("name") or "").strip() or "Nytt projekt"
+        customer_name = (data.get("customer_name") or "").strip() or "Ny kund"
+        customer, _ = Customer.objects.get_or_create(name=customer_name)
+
+        project = Project.objects.create(
+            name=name,
+            customer=customer,
+            status=data.get("status") or Project.Status.PLANNING,
+            contract_value=_to_decimal(data.get("contract_value")),
+            margin_alert_threshold_pct=_to_decimal(
+                data.get("margin_alert_threshold_pct"), "10"
+            ),
+        )
+
+        for item in data.get("scope_items") or []:
+            ScopeItem.objects.create(
+                project=project,
+                item_type=item.get("item_type") or ScopeItem.ItemType.LABOR,
+                description=(item.get("description") or "").strip() or "Post",
+                quantity=_to_decimal(item.get("quantity"), "1"),
+                unit=item.get("unit") or "st",
+                unit_cost=_to_decimal(item.get("unit_cost")),
+            )
+
+        return Response(
+            ProjectDetailSerializer(project).data, status=status.HTTP_201_CREATED
+        )
 
 
 class ScopeItemViewSet(viewsets.ModelViewSet):

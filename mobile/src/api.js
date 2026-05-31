@@ -16,6 +16,10 @@ async function request(path, options = {}) {
 export const api = {
   listProjects: () => request("/projects/"),
   getProject: (id) => request(`/projects/${id}/`),
+  createProject: (data) =>
+    request("/projects/", { method: "POST", body: JSON.stringify(data) }),
+  createScopeItem: (data) =>
+    request("/scope-items/", { method: "POST", body: JSON.stringify(data) }),
 
   logCheckIn: (data) =>
     request("/check-ins/", { method: "POST", body: JSON.stringify(data) }),
