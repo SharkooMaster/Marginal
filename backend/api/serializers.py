@@ -11,7 +11,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 class ScopeItemSerializer(serializers.ModelSerializer):
     line_total = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
+        max_digits=20, decimal_places=2, read_only=True
     )
 
     class Meta:
@@ -23,7 +23,7 @@ class ScopeItemSerializer(serializers.ModelSerializer):
 
 
 class CheckInSerializer(serializers.ModelSerializer):
-    cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    cost = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
 
     class Meta:
         model = CheckIn
@@ -34,7 +34,7 @@ class CheckInSerializer(serializers.ModelSerializer):
 
 
 class MaterialUsageSerializer(serializers.ModelSerializer):
-    cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    cost = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
 
     class Meta:
         model = MaterialUsage
@@ -60,10 +60,10 @@ class ProjectListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     current_margin = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
+        max_digits=20, decimal_places=2, read_only=True
     )
     current_margin_pct = serializers.DecimalField(
-        max_digits=6, decimal_places=2, read_only=True
+        max_digits=20, decimal_places=2, read_only=True
     )
     is_at_risk = serializers.BooleanField(read_only=True)
     open_ata_count = serializers.SerializerMethodField()
@@ -90,15 +90,15 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
     material_usages = MaterialUsageSerializer(many=True, read_only=True)
     ata_items = AtaItemSerializer(many=True, read_only=True)
 
-    budgeted_labor = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    budgeted_materials = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    budgeted_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    actual_labor = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    actual_materials = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    actual_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    approved_ata = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    current_margin = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    current_margin_pct = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
+    budgeted_labor = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    budgeted_materials = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    budgeted_total = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    actual_labor = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    actual_materials = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    actual_total = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    approved_ata = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    current_margin = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    current_margin_pct = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
     is_at_risk = serializers.BooleanField(read_only=True)
 
     class Meta:
