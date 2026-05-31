@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Marginal",
+    "slug": "marginal-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#2b1f63"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.marginal.mobile"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
