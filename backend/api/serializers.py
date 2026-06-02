@@ -14,12 +14,13 @@ from .models import (
 class ReportPhotoSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(read_only=True)
     uploaded_by_name = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = ReportPhoto
         fields = [
             "id", "project", "check_in", "material", "image",
-            "caption", "uploaded_by_name", "created_at",
+            "caption", "uploaded_by_name", "can_delete", "created_at",
         ]
 
     def get_uploaded_by_name(self, obj):
@@ -29,6 +30,15 @@ class ReportPhotoSerializer(serializers.ModelSerializer):
         return (profile.full_name if profile and profile.full_name else "") or (
             obj.uploaded_by.email or obj.uploaded_by.username
         )
+
+    def get_can_delete(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        profile = getattr(user, "profile", None)
+        is_manager = bool(profile and profile.role == "manager")
+        return is_manager or obj.uploaded_by_id == user.id
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -93,6 +103,8 @@ class ProjectListSerializer(serializers.ModelSerializer):
     current_margin_pct = serializers.DecimalField(
         max_digits=20, decimal_places=2, read_only=True
     )
+    budgeted_total = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
+    actual_total = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
     is_at_risk = serializers.BooleanField(read_only=True)
     open_ata_count = serializers.SerializerMethodField()
 
@@ -101,6 +113,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "customer_name", "status", "status_display",
             "contract_value", "current_margin", "current_margin_pct",
+            "budgeted_total", "actual_total",
             "is_at_risk", "open_ata_count", "archived",
         ]
 

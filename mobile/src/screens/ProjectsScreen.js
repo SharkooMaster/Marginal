@@ -10,8 +10,45 @@ import PrimaryButton from "../components/PrimaryButton";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useLiveRefresh } from "../live/LiveProvider";
-import { colors, font, spacing, formatSek } from "../theme";
+import { colors, font, glow, radius, spacing, formatSek } from "../theme";
 import { useResponsive } from "../useResponsive";
+
+function CardBudget({ budget, actual }) {
+  const b = Number(budget) || 0;
+  const a = Number(actual) || 0;
+  const over = a > b;
+  const rawPct = b > 0 ? (a / b) * 100 : a > 0 ? 100 : 0;
+  const barPct = Math.min(100, rawPct);
+  const diff = b - a;
+
+  const pctLabel = b > 0 ? `${Math.round(rawPct)}% av budget` : "Ingen budget";
+  const diffLabel =
+    b > 0
+      ? over
+        ? `${formatSek(Math.abs(diff))} över`
+        : `${formatSek(diff)} kvar`
+      : a > 0
+      ? `${formatSek(a)} oplanerat`
+      : "—";
+  const diffTone = over ? colors.danger : b > 0 ? colors.success : colors.textMuted;
+
+  return (
+    <View style={styles.budgetWrap}>
+      <View style={styles.budgetTrack}>
+        <View
+          style={[
+            styles.budgetFill,
+            { width: `${barPct}%`, backgroundColor: over ? colors.danger : colors.primary },
+          ]}
+        />
+      </View>
+      <View style={styles.budgetFoot}>
+        <Text style={styles.budgetPct}>{pctLabel}</Text>
+        <Text style={[styles.budgetDiff, { color: diffTone }]}>{diffLabel}</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function ProjectsScreen({ navigation }) {
   const { columns, isCompact } = useResponsive();
@@ -58,8 +95,17 @@ export default function ProjectsScreen({ navigation }) {
           <Text style={styles.title}>Projekt</Text>
         </View>
         {isManager && projects.length > 0 ? (
-          <Pressable onPress={() => navigation.navigate("NewProject")} hitSlop={8}>
-            <Text style={styles.addLink}>+ Nytt projekt</Text>
+          <Pressable
+            onPress={() => navigation.navigate("NewProject")}
+            hitSlop={8}
+            style={({ pressed, hovered }) => [
+              styles.addBtn,
+              hovered && styles.addBtnHover,
+              pressed && styles.addBtnPressed,
+              isCompact && styles.addBtnCompact,
+            ]}
+          >
+            <Text style={styles.addBtnText}>+ Nytt projekt</Text>
           </Pressable>
         ) : null}
       </View>
@@ -112,6 +158,8 @@ export default function ProjectsScreen({ navigation }) {
                 <MarginBar marginPct={item.current_margin_pct} atRisk={item.is_at_risk} compact />
               </View>
 
+              <CardBudget budget={item.budgeted_total} actual={item.actual_total} />
+
               <View style={styles.metaRow}>
                 <Text style={styles.meta}>{formatSek(item.current_margin)} kvar</Text>
                 {item.open_ata_count > 0 ? (
@@ -149,13 +197,31 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   sectionActions: { flexDirection: "row", alignItems: "center", gap: spacing.lg },
-  addLink: { color: colors.primary, fontSize: font.small, fontWeight: "800" },
+  addBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    ...glow(colors.primary, 0.45),
+  },
+  addBtnHover: { backgroundColor: colors.primaryDeep, borderColor: colors.primary },
+  addBtnPressed: { opacity: 0.85 },
+  addBtnCompact: { alignSelf: "stretch", alignItems: "center" },
+  addBtnText: { color: colors.onPrimary, fontSize: font.small, fontWeight: "800", letterSpacing: 0.2 },
   mutedLink: { color: colors.textMuted, fontSize: font.small, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
   cardTop: { flexDirection: "row", alignItems: "flex-start" },
   name: { color: colors.text, fontSize: font.h3, fontWeight: "700" },
   customer: { color: colors.textMuted, fontSize: font.small, marginTop: 3 },
   barWrap: { marginTop: spacing.xl },
+  budgetWrap: { marginTop: spacing.lg },
+  budgetTrack: { height: 6, borderRadius: 999, backgroundColor: colors.surfaceRaised, overflow: "hidden" },
+  budgetFill: { height: "100%", borderRadius: 999 },
+  budgetFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.sm },
+  budgetPct: { color: colors.textMuted, fontSize: font.tiny, fontWeight: "700" },
+  budgetDiff: { fontSize: font.tiny, fontWeight: "800" },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { colors, font } from "./src/theme";
 import { AuthProvider, useAuth } from "./src/auth/AuthContext";
@@ -64,13 +65,15 @@ function RootNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <LiveProvider>
-        <NavigationContainer theme={navTheme}>
-          <StatusBar style="light" />
-          <RootNavigator />
-        </NavigationContainer>
-      </LiveProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <LiveProvider>
+          <NavigationContainer theme={navTheme}>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </NavigationContainer>
+        </LiveProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

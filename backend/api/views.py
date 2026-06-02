@@ -380,3 +380,20 @@ class ReportPhotoViewSet(viewsets.ModelViewSet):
             ReportPhotoSerializer(photo, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def destroy(self, request, *args, **kwargs):
+        photo = self.get_object()
+        # Managers can remove any photo; everyone else only their own uploads.
+        if not _is_manager(request.user) and photo.uploaded_by_id != request.user.id:
+            return Response(
+                {"detail": "Du kan bara ta bort dina egna foton."}, status=403
+            )
+        project = photo.project
+        photo.image.delete(save=False)  # remove the file from disk too
+        photo.delete()
+        trigger_company_event(
+            project.company_id,
+            "photo.deleted",
+            {"project_id": project.id, "project": project.name},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

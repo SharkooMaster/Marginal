@@ -3,6 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Modal,
   Platform,
@@ -34,24 +35,50 @@ function Row({ label, value, tone, strong }) {
   );
 }
 
-function BudgetBlock({ title, budget, actual }) {
-  const over = Number(actual) > Number(budget);
-  const pct = Number(budget) > 0 ? Math.min(100, (Number(actual) / Number(budget)) * 100) : 0;
+function BudgetBlock({ title, budget, actual, emphasis }) {
+  const b = Number(budget) || 0;
+  const a = Number(actual) || 0;
+  const over = a > b;
+  const rawPct = b > 0 ? (a / b) * 100 : a > 0 ? 100 : 0;
+  const barPct = Math.min(100, rawPct);
+  const diff = b - a;
+
+  const pctLabel = b > 0 ? `${Math.round(rawPct)}% av budget` : "Ingen budget satt";
+  const diffLabel =
+    b > 0
+      ? over
+        ? `${formatSek(Math.abs(diff))} över`
+        : `${formatSek(diff)} kvar`
+      : a > 0
+      ? `${formatSek(a)} oplanerat`
+      : "—";
+  const diffTone = over ? colors.danger : b > 0 ? colors.success : colors.textMuted;
+
   return (
-    <View style={{ marginBottom: spacing.lg }}>
+    <View style={[styles.budgetBlock, emphasis && styles.budgetBlockTotal]}>
       <View style={styles.budgetHead}>
-        <Text style={styles.budgetTitle}>{title}</Text>
-        <Text style={[styles.budgetNums, over && { color: colors.danger }]}>
+        <Text style={[styles.budgetTitle, emphasis && styles.budgetTitleTotal]}>{title}</Text>
+        <Text
+          style={[
+            styles.budgetNums,
+            emphasis && styles.budgetNumsTotal,
+            over && { color: colors.danger },
+          ]}
+        >
           {formatSek(actual)} / {formatSek(budget)}
         </Text>
       </View>
-      <View style={styles.miniTrack}>
+      <View style={[styles.miniTrack, emphasis && styles.miniTrackTotal]}>
         <View
           style={[
             styles.miniFill,
-            { width: `${pct}%`, backgroundColor: over ? colors.danger : colors.primary },
+            { width: `${barPct}%`, backgroundColor: over ? colors.danger : colors.primary },
           ]}
         />
+      </View>
+      <View style={styles.budgetFoot}>
+        <Text style={styles.budgetPct}>{pctLabel}</Text>
+        <Text style={[styles.budgetDiff, { color: diffTone }]}>{diffLabel}</Text>
       </View>
     </View>
   );
@@ -66,6 +93,9 @@ export default function ProjectDetailScreen({ route, navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(null);
+  const [photoConfirm, setPhotoConfirm] = useState(false);
+  const [photoDeleting, setPhotoDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -139,6 +169,29 @@ export default function ProjectDetailScreen({ route, navigation }) {
     }
   }
 
+  function closeViewer() {
+    setViewerIndex(null);
+    setPhotoConfirm(false);
+  }
+
+  async function removePhoto() {
+    if (viewerIndex == null) return;
+    const photo = (project.photos || [])[viewerIndex];
+    if (!photo) return;
+    try {
+      setPhotoDeleting(true);
+      await api.deletePhoto(photo.id);
+      closeViewer();
+      await load();
+    } catch (e) {
+      const msg = "Kunde inte ta bort fotot: " + e.message;
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Fel", msg);
+    } finally {
+      setPhotoDeleting(false);
+    }
+  }
+
   if (loading || !project) {
     return (
       <View style={styles.center}>
@@ -181,6 +234,9 @@ export default function ProjectDetailScreen({ route, navigation }) {
   const budget = (
     <>
       <Text style={styles.sectionTitle}>Budget mot verkligt</Text>
+      <Text style={styles.sectionHelp}>
+        Planerad kostnad jämfört med vad som loggats. Grön = inom budget, röd = över.
+      </Text>
       <Card>
         {hasScope ? (
           <>
@@ -189,6 +245,13 @@ export default function ProjectDetailScreen({ route, navigation }) {
               title="Material"
               budget={project.budgeted_materials}
               actual={project.actual_materials}
+            />
+            <View style={styles.divider} />
+            <BudgetBlock
+              title="Totalt"
+              budget={project.budgeted_total}
+              actual={project.actual_total}
+              emphasis
             />
             <View style={styles.divider} />
             {project.scope_items.map((s) => (
@@ -231,8 +294,20 @@ export default function ProjectDetailScreen({ route, navigation }) {
         <Text style={styles.sectionTitle}>Foton ({photoList.length})</Text>
         <Card>
           <View style={styles.photoGrid}>
-            {photoList.map((p) => (
-              <Image key={p.id} source={{ uri: p.image }} style={styles.galleryImg} />
+            {photoList.map((p, i) => (
+              <Pressable
+                key={p.id}
+                onPress={() => {
+                  setPhotoConfirm(false);
+                  setViewerIndex(i);
+                }}
+                style={({ pressed, hovered }) => [
+                  styles.galleryThumb,
+                  (pressed || hovered) && styles.galleryThumbActive,
+                ]}
+              >
+                <Image source={{ uri: p.image }} style={styles.galleryImg} />
+              </Pressable>
             ))}
           </View>
         </Card>
@@ -339,6 +414,100 @@ export default function ProjectDetailScreen({ route, navigation }) {
     </Modal>
   );
 
+  const current = viewerIndex != null ? photoList[viewerIndex] : null;
+  const win = Dimensions.get("window");
+  const showPrev = () =>
+    setViewerIndex((i) => (i > 0 ? i - 1 : photoList.length - 1));
+  const showNext = () =>
+    setViewerIndex((i) => (i < photoList.length - 1 ? i + 1 : 0));
+
+  const viewer = (
+    <Modal
+      transparent
+      visible={current != null}
+      animationType="fade"
+      onRequestClose={closeViewer}
+    >
+      <View style={styles.viewerOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={closeViewer} />
+        <Pressable style={styles.viewerClose} onPress={closeViewer} hitSlop={12}>
+          <Text style={styles.viewerCloseText}>✕</Text>
+        </Pressable>
+
+        {current ? (
+          <View style={styles.viewerContent} pointerEvents="box-none">
+            <Image
+              source={{ uri: current.image }}
+              style={{
+                width: Math.min(win.width - spacing.lg * 2, 1100),
+                height: win.height * 0.62,
+                borderRadius: radius.md,
+              }}
+              resizeMode="contain"
+            />
+
+            {photoList.length > 1 ? (
+              <>
+                <Pressable style={[styles.viewerNav, styles.viewerNavLeft]} onPress={showPrev} hitSlop={10}>
+                  <Text style={styles.viewerNavText}>‹</Text>
+                </Pressable>
+                <Pressable style={[styles.viewerNav, styles.viewerNavRight]} onPress={showNext} hitSlop={10}>
+                  <Text style={styles.viewerNavText}>›</Text>
+                </Pressable>
+              </>
+            ) : null}
+
+            <View style={styles.viewerBar} pointerEvents="box-none">
+              <View style={{ flex: 1 }}>
+                {current.caption ? (
+                  <Text style={styles.viewerCaption} numberOfLines={2}>{current.caption}</Text>
+                ) : null}
+                <Text style={styles.viewerMeta}>
+                  {(current.uploaded_by_name || "Okänd") +
+                    " · " +
+                    new Date(current.created_at).toLocaleDateString("sv-SE") +
+                    `  (${viewerIndex + 1}/${photoList.length})`}
+                </Text>
+              </View>
+              {current.can_delete ? (
+                <Pressable
+                  style={({ pressed }) => [styles.viewerDelete, pressed && { opacity: 0.7 }]}
+                  onPress={() => setPhotoConfirm(true)}
+                  disabled={photoDeleting}
+                >
+                  <Text style={styles.viewerDeleteText}>Ta bort</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {photoConfirm ? (
+              <View style={styles.photoConfirm}>
+                <Text style={styles.photoConfirmText}>Ta bort detta foto permanent?</Text>
+                <View style={styles.photoConfirmActions}>
+                  <View style={{ flex: 1 }}>
+                    <PrimaryButton
+                      title="Avbryt"
+                      variant="ghost"
+                      onPress={() => setPhotoConfirm(false)}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <PrimaryButton
+                      title="Ta bort"
+                      variant="danger"
+                      onPress={removePhoto}
+                      loading={photoDeleting}
+                    />
+                  </View>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </Modal>
+  );
+
   if (isWide) {
     return (
       <Screen>
@@ -355,6 +524,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
         </View>
         {menu}
         {confirm}
+        {viewer}
       </Screen>
     );
   }
@@ -368,6 +538,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
       <View style={{ marginTop: spacing.lg }}>{actions}</View>
       {menu}
       {confirm}
+      {viewer}
     </Screen>
   );
 }
@@ -429,18 +600,103 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
+  sectionHelp: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  budgetBlock: { marginBottom: spacing.lg },
+  budgetBlockTotal: { marginBottom: spacing.sm },
   budgetHead: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
   budgetTitle: { color: colors.text, fontSize: font.body, fontWeight: "600" },
+  budgetTitleTotal: { fontWeight: "800", fontSize: font.h3 },
   budgetNums: { color: colors.textMuted, fontSize: font.small, fontWeight: "700" },
+  budgetNumsTotal: { color: colors.text, fontSize: font.body, fontWeight: "800" },
   miniTrack: { height: 8, borderRadius: 999, backgroundColor: colors.surfaceRaised, overflow: "hidden" },
+  miniTrackTotal: { height: 12 },
   miniFill: { height: "100%", borderRadius: 999 },
+  budgetFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.sm },
+  budgetPct: { color: colors.textMuted, fontSize: font.tiny, fontWeight: "700" },
+  budgetDiff: { fontSize: font.tiny, fontWeight: "800" },
   scopeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.sm },
   scopeDesc: { color: colors.text, fontSize: font.body, fontWeight: "600" },
   scopeMeta: { color: colors.textMuted, fontSize: font.tiny, marginTop: 2 },
   scopeCost: { color: colors.text, fontSize: font.body, fontWeight: "700" },
   scopeEmpty: { color: colors.textMuted, fontSize: font.small, lineHeight: 20 },
   photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-  galleryImg: { width: 96, height: 96, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  galleryThumb: { borderRadius: radius.sm, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  galleryThumbActive: { borderColor: colors.accent },
+  galleryImg: { width: 96, height: 96 },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.88)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  viewerContent: { width: "100%", maxWidth: 1100, alignItems: "center" },
+  viewerClose: {
+    position: "absolute",
+    top: Platform.OS === "web" ? spacing.lg : spacing.xxl,
+    right: spacing.lg,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerCloseText: { color: colors.text, fontSize: 18, fontWeight: "800" },
+  viewerNav: {
+    position: "absolute",
+    top: "44%",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(20,18,34,0.7)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerNavLeft: { left: 0 },
+  viewerNavRight: { right: 0 },
+  viewerNavText: { color: colors.text, fontSize: 28, fontWeight: "800", lineHeight: 30 },
+  viewerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    width: "100%",
+    maxWidth: 720,
+  },
+  viewerCaption: { color: colors.text, fontSize: font.body, fontWeight: "700" },
+  viewerMeta: { color: colors.textMuted, fontSize: font.small, marginTop: 2 },
+  viewerDelete: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft,
+  },
+  viewerDeleteText: { color: colors.danger, fontSize: font.small, fontWeight: "800" },
+  photoConfirm: {
+    marginTop: spacing.lg,
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  photoConfirmText: { color: colors.text, fontSize: font.body, fontWeight: "700", textAlign: "center" },
+  photoConfirmActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
   ataCard: { borderColor: colors.warningSoft, marginBottom: spacing.md },
   ataTitle: { color: colors.text, fontSize: font.body, fontWeight: "700", flex: 1, paddingRight: spacing.md },
   ataCost: { color: colors.warning, fontSize: font.h3, fontWeight: "800", marginTop: spacing.sm },

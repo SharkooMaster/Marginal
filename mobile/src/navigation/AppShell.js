@@ -1,8 +1,9 @@
 import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "../auth/AuthContext";
 import { colors, font, glow, layout, monoFont, spacing } from "../theme";
@@ -52,13 +53,29 @@ function detailScreens() {
   );
 }
 
+// The tab root screens hide the native header, so they don't get the automatic
+// top safe-area inset that header screens do. Wrap them so their content clears
+// the status bar / notch on mobile. Insets are 0 on web and desktop, so this is
+// a no-op there.
+function withSafeTop(Component) {
+  return function SafeTopScreen(props) {
+    const insets = useSafeAreaInsets();
+    return (
+      <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.background }}>
+        <Component {...props} />
+      </View>
+    );
+  };
+}
+
 function makeStack(rootName, rootComponent, rootTitle) {
+  const RootScreen = withSafeTop(rootComponent);
   return function SectionStack() {
     return (
       <Stack.Navigator screenOptions={stackOptions}>
         <Stack.Screen
           name={rootName}
-          component={rootComponent}
+          component={RootScreen}
           options={{ title: rootTitle, headerShown: false }}
         />
         {detailScreens()}
@@ -111,6 +128,7 @@ export default function AppShell() {
 }
 
 function ShellTabBar({ state, navigation, tabs, isWide }) {
+  const insets = useSafeAreaInsets();
   const meta = (name) => tabs.find((t) => t.name === name) || {};
   const onPress = (route, focused) => {
     const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
@@ -154,7 +172,7 @@ function ShellTabBar({ state, navigation, tabs, isWide }) {
   }
 
   return (
-    <View style={styles.bottomBar}>
+    <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
       {state.routes.map((route, i) => {
         const focused = state.index === i;
         const m = meta(route.name);
@@ -265,7 +283,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.sm,
-    paddingBottom: Platform.OS === "ios" ? spacing.xl : spacing.sm,
   },
   bottomItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 4 },
   bottomLabel: { color: colors.textMuted, fontSize: font.tiny, fontWeight: "600" },

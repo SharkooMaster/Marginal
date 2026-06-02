@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
 import PrimaryButton from "../components/PrimaryButton";
@@ -23,10 +24,11 @@ const FEATURES = [
 
 export default function LandingScreen({ navigation }) {
   const { isCompact } = useResponsive();
+  const insets = useSafeAreaInsets();
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
-      <View style={[styles.column, { maxWidth: layout.contentMaxWidth }]}>
+      <View style={[styles.column, { maxWidth: layout.contentMaxWidth, paddingTop: insets.top }]}>
         <View style={styles.nav}>
           <Text style={styles.brand}>Marginal</Text>
           <View style={styles.navLinks}>

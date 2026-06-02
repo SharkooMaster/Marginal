@@ -22,6 +22,8 @@ function bannerFor(event, data) {
       return { text: `Projekt borttaget: ${data.name || ""}`, tone: "neutral" };
     case "photo.added":
       return { text: `Nytt foto i ${data.project || "projekt"}`, tone: "accent" };
+    case "photo.deleted":
+      return { text: `Foto borttaget i ${data.project || "projekt"}`, tone: "neutral" };
     default:
       return null;
   }
@@ -34,6 +36,7 @@ const EVENTS = [
   "project.created",
   "project.deleted",
   "photo.added",
+  "photo.deleted",
 ];
 
 export function LiveProvider({ children }) {

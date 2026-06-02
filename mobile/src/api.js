@@ -164,4 +164,5 @@ export const api = {
 
   listPhotos: (projectId) => request(`/photos/?project=${projectId}`),
   uploadPhoto: (formData) => multipartRequest("/photos/", formData),
+  deletePhoto: (id) => request(`/photos/${id}/`, { method: "DELETE" }),
 };
