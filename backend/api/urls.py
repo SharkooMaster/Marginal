@@ -2,7 +2,14 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .auth_views import DeviceTokenView, LoginView, MeView, RegisterView, TeamView
+from .auth_views import (
+    DeviceTokenView,
+    LoginView,
+    MeView,
+    RegisterView,
+    TeamMemberView,
+    TeamView,
+)
 from .views import (
     AtaItemViewSet,
     CheckInViewSet,
@@ -28,5 +35,6 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view()),
     path("auth/me/", MeView.as_view()),
     path("auth/team/", TeamView.as_view()),
+    path("auth/team/<int:user_id>/", TeamMemberView.as_view()),
     path("auth/device/", DeviceTokenView.as_view()),
 ] + router.urls

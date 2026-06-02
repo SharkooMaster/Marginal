@@ -7,7 +7,7 @@ import Card from "../components/Card";
 import Pill from "../components/Pill";
 import PrimaryButton from "../components/PrimaryButton";
 import { api } from "../api";
-import { colors, font, spacing, formatSek } from "../theme";
+import { colors, font, radius, spacing, formatSek } from "../theme";
 
 const NEXT_LABEL = {
   detected: "Skicka till granskning",
@@ -20,6 +20,37 @@ function toneFor(status) {
   if (status === "customer_approved") return "success";
   if (status === "rejected") return "danger";
   return "warning";
+}
+
+// Renders an ÄTA description. Auto-flagged items carry structured "Label: value"
+// lines (type of work, who did it, hours/quantity, etc.) which we lay out as a
+// detail table so the chef sees exactly what was logged before approving.
+function AtaDetails({ text }) {
+  const lines = String(text)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  return (
+    <View style={styles.detailBox}>
+      {lines.map((line, i) => {
+        const idx = line.indexOf(": ");
+        if (idx > 0 && idx < 24) {
+          return (
+            <View key={i} style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{line.slice(0, idx)}</Text>
+              <Text style={styles.detailValue}>{line.slice(idx + 2)}</Text>
+            </View>
+          );
+        }
+        return (
+          <Text key={i} style={styles.detailPlain}>
+            {line}
+          </Text>
+        );
+      })}
+    </View>
+  );
 }
 
 export default function AtaScreen({ route }) {
@@ -87,7 +118,8 @@ export default function AtaScreen({ route }) {
                 <Text style={styles.title}>{a.title}</Text>
                 <Pill label={a.status_display} tone={toneFor(a.status)} />
               </View>
-              {a.description ? <Text style={styles.desc}>{a.description}</Text> : null}
+              {a.description ? <AtaDetails text={a.description} /> : null}
+              <Text style={styles.costLabel}>Uppskattad kostnad</Text>
               <Text style={styles.cost}>{formatSek(a.estimated_cost)}</Text>
               {a.notify_deadline ? (
                 <Text style={styles.deadline}>Notifiera kund senast: {a.notify_deadline}</Text>
@@ -122,7 +154,28 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { color: colors.text, fontSize: font.h3, fontWeight: "700", flex: 1, paddingRight: spacing.md },
   desc: { color: colors.textMuted, fontSize: font.small, marginTop: spacing.sm, lineHeight: 20 },
-  cost: { color: colors.warning, fontSize: font.h2, fontWeight: "800", marginTop: spacing.md },
+  detailBox: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: 2,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingVertical: spacing.xs,
+    gap: spacing.md,
+  },
+  detailLabel: { color: colors.textMuted, fontSize: font.small, fontWeight: "600" },
+  detailValue: { color: colors.text, fontSize: font.small, fontWeight: "700", flex: 1, textAlign: "right" },
+  detailPlain: { color: colors.textMuted, fontSize: font.small, lineHeight: 19, paddingVertical: spacing.xs },
+  costLabel: { color: colors.textFaint, fontSize: font.tiny, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginTop: spacing.md },
+  cost: { color: colors.warning, fontSize: font.h2, fontWeight: "800", marginTop: 2 },
   deadline: { color: colors.textFaint, fontSize: font.tiny, marginTop: spacing.sm },
   actions: { marginTop: spacing.lg },
 });

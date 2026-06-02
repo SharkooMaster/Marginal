@@ -141,6 +141,10 @@ export const api = {
   deleteProject: (id) => request(`/projects/${id}/`, { method: "DELETE" }),
   createScopeItem: (data) =>
     request("/scope-items/", { method: "POST", body: JSON.stringify(data) }),
+  updateScopeItem: (itemId, data) =>
+    request(`/scope-items/${itemId}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteScopeItem: (itemId) =>
+    request(`/scope-items/${itemId}/`, { method: "DELETE" }),
 
   logCheckIn: (data) =>
     request("/check-ins/", { method: "POST", body: JSON.stringify(data) }),
@@ -156,6 +160,10 @@ export const api = {
   listTeam: () => request("/auth/team/"),
   addMember: (data) =>
     request("/auth/team/", { method: "POST", body: JSON.stringify(data) }),
+  updateMember: (userId, data) =>
+    request(`/auth/team/${userId}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteMember: (userId) =>
+    request(`/auth/team/${userId}/`, { method: "DELETE" }),
   registerDevice: (token, platform) =>
     request("/auth/device/", {
       method: "POST",

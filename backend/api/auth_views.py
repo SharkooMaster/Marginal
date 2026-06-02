@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Company, DeviceToken, UserProfile
+from .models import Company, Customer, DeviceToken, Project, UserProfile
 
 User = get_user_model()
 
@@ -144,3 +144,105 @@ class TeamView(APIView):
             {"id": user.id, "email": email, "full_name": full_name, "role": role},
             status=201,
         )
+
+
+class TeamMemberView(APIView):
+    """Managers edit or remove a single member of their company."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _resolve(self, request, user_id):
+        """Return (member_profile, manager_profile, error_response)."""
+        manager = get_profile(request.user)
+        if manager.role != UserProfile.Role.MANAGER:
+            return None, manager, Response(
+                {"detail": "Endast chefer kan ändra medlemmar."}, status=403
+            )
+        try:
+            member = UserProfile.objects.select_related("user").get(
+                user_id=user_id, company=manager.company
+            )
+        except UserProfile.DoesNotExist:
+            return None, manager, Response(
+                {"detail": "Medlemmen hittades inte."}, status=404
+            )
+        return member, manager, None
+
+    def _other_managers(self, manager, exclude_user_id):
+        return (
+            UserProfile.objects.filter(
+                company=manager.company, role=UserProfile.Role.MANAGER
+            )
+            .exclude(user_id=exclude_user_id)
+            .count()
+        )
+
+    def patch(self, request, user_id):
+        member, manager, err = self._resolve(request, user_id)
+        if err:
+            return err
+
+        if "full_name" in request.data:
+            full_name = (request.data.get("full_name") or "").strip()
+            member.full_name = full_name
+            member.user.first_name = full_name
+
+        if "email" in request.data:
+            email = (request.data.get("email") or "").strip().lower()
+            current = (member.user.email or member.user.username or "").lower()
+            if email and email != current:
+                if User.objects.filter(username=email).exclude(pk=member.user_id).exists():
+                    return Response({"detail": "E-posten används redan."}, status=400)
+                member.user.username = email
+                member.user.email = email
+
+        if "role" in request.data:
+            role = request.data.get("role")
+            if role in (UserProfile.Role.MANAGER, UserProfile.Role.WORKER):
+                demoting = (
+                    member.role == UserProfile.Role.MANAGER
+                    and role != UserProfile.Role.MANAGER
+                )
+                if demoting and self._other_managers(manager, member.user_id) == 0:
+                    return Response(
+                        {"detail": "Företaget måste ha minst en chef."}, status=400
+                    )
+                member.role = role
+
+        password = request.data.get("password")
+        if password:
+            if len(password) < 8:
+                return Response(
+                    {"detail": "Lösenordet måste vara minst 8 tecken."}, status=400
+                )
+            member.user.set_password(password)
+
+        member.user.save()
+        member.save()
+        return Response(
+            {
+                "id": member.user_id,
+                "email": member.user.email or member.user.username,
+                "full_name": member.full_name,
+                "role": member.role,
+            }
+        )
+
+    def delete(self, request, user_id):
+        member, manager, err = self._resolve(request, user_id)
+        if err:
+            return err
+        if member.user_id == request.user.id:
+            return Response({"detail": "Du kan inte ta bort dig själv."}, status=400)
+        if (
+            member.role == UserProfile.Role.MANAGER
+            and self._other_managers(manager, member.user_id) == 0
+        ):
+            return Response({"detail": "Företaget måste ha minst en chef."}, status=400)
+
+        # Keep the company's data: hand any projects/customers this member owned
+        # over to the acting manager instead of cascade-deleting them.
+        Project.objects.filter(owner=member.user).update(owner=request.user)
+        Customer.objects.filter(owner=member.user).update(owner=request.user)
+        member.user.delete()  # cascades the profile + device tokens
+        return Response(status=204)

@@ -9,12 +9,14 @@ import { api } from "../api";
 import { colors, font, layout, radius, spacing } from "../theme";
 
 export default function AddScopeScreen({ route, navigation }) {
-  const { id } = route.params;
-  const [itemType, setItemType] = useState("labor"); // "labor" | "material"
-  const [description, setDescription] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [unitCost, setUnitCost] = useState("");
+  const { id, item } = route.params;
+  const editing = !!item;
+  const [itemType, setItemType] = useState(item?.item_type || "labor"); // "labor" | "material"
+  const [description, setDescription] = useState(item?.description || "");
+  const [quantity, setQuantity] = useState(item ? String(Number(item.quantity)) : "");
+  const [unitCost, setUnitCost] = useState(item ? String(Number(item.unit_cost)) : "");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isLabor = itemType === "labor";
 
@@ -28,16 +30,21 @@ export default function AddScopeScreen({ route, navigation }) {
       fail("Beskriv budgetposten.");
       return;
     }
+    const payload = {
+      project: id,
+      item_type: itemType,
+      description: description.trim(),
+      quantity: Number(quantity) || 1,
+      unit: isLabor ? "h" : "st",
+      unit_cost: Number(unitCost) || 0,
+    };
     try {
       setSaving(true);
-      await api.createScopeItem({
-        project: id,
-        item_type: itemType,
-        description: description.trim(),
-        quantity: Number(quantity) || 1,
-        unit: isLabor ? "h" : "st",
-        unit_cost: Number(unitCost) || 0,
-      });
+      if (editing) {
+        await api.updateScopeItem(item.id, payload);
+      } else {
+        await api.createScopeItem(payload);
+      }
       navigation.goBack();
     } catch (e) {
       fail("Kunde inte spara: " + e.message);
@@ -46,12 +53,37 @@ export default function AddScopeScreen({ route, navigation }) {
     }
   }
 
+  async function remove() {
+    try {
+      setDeleting(true);
+      await api.deleteScopeItem(item.id);
+      navigation.goBack();
+    } catch (e) {
+      fail("Kunde inte ta bort: " + e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function confirmRemove() {
+    if (Platform.OS === "web") {
+      if (window.confirm("Ta bort denna budgetpost?")) remove();
+    } else {
+      Alert.alert("Ta bort budgetpost?", "Detta går inte att ångra.", [
+        { text: "Avbryt", style: "cancel" },
+        { text: "Ta bort", style: "destructive", onPress: remove },
+      ]);
+    }
+  }
+
   return (
     <Screen maxWidth={layout.formMaxWidth}>
       <View style={styles.head}>
-        <Text style={styles.title}>Lägg till budgetpost</Text>
+        <Text style={styles.title}>{editing ? "Redigera budgetpost" : "Lägg till budgetpost"}</Text>
         <Text style={styles.sub}>
-          Budgeten är grunden för marginalberäkning och ÄTA-upptäckt.
+          {editing
+            ? "Rätta felaktiga värden. Marginal och ÄTA räknas om direkt."
+            : "Budgeten är grunden för marginalberäkning och ÄTA-upptäckt."}
         </Text>
       </View>
 
@@ -91,7 +123,22 @@ export default function AddScopeScreen({ route, navigation }) {
           placeholder={isLabor ? "t.ex. 550" : "t.ex. 64000"}
           keyboardType="numeric"
         />
-        <PrimaryButton title="Lägg till i budget" onPress={save} loading={saving} />
+        <PrimaryButton
+          title={editing ? "Spara ändringar" : "Lägg till i budget"}
+          onPress={save}
+          loading={saving}
+        />
+        {editing ? (
+          <>
+            <View style={{ height: spacing.sm }} />
+            <PrimaryButton
+              title="Ta bort budgetpost"
+              variant="danger"
+              onPress={confirmRemove}
+              loading={deleting}
+            />
+          </>
+        ) : null}
       </Card>
     </Screen>
   );

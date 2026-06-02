@@ -195,13 +195,33 @@ class ScopeItemViewSet(viewsets.ModelViewSet):
         _require_company_project(self.request.user, self.request.data.get("project"))
         serializer.save()
 
+    def perform_update(self, serializer):
+        _require_manager(self.request.user)
+        serializer.save()
 
-def _maybe_create_ata(project, title, estimated_cost):
+    def perform_destroy(self, instance):
+        _require_manager(self.request.user)
+        instance.delete()
+
+
+def _fmt_amount(value):
+    """Render a number without noisy trailing zeros for ÄTA detail text."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if f == int(f):
+        return str(int(f))
+    return f"{f:.2f}".rstrip("0").rstrip(".")
+
+
+def _maybe_create_ata(project, title, estimated_cost, description=None):
     """Auto-create a 'detected' ÄTA for out-of-scope work."""
     AtaItem.objects.create(
         project=project,
         title=title,
-        description="Automatiskt flaggat: arbete loggat utanför ursprunglig kontraktsomfattning.",
+        description=description
+        or "Automatiskt flaggat: arbete loggat utanför ursprunglig kontraktsomfattning.",
         estimated_cost=estimated_cost,
         status=AtaItem.Status.DETECTED,
         trigger_type=AtaItem.Trigger.AUTO,
@@ -258,10 +278,19 @@ class CheckInViewSet(viewsets.ModelViewSet):
         if response.data.get("id"):
             check_in = CheckIn.objects.get(pk=response.data["id"])
             if outside_scope:
+                detail = (
+                    "Typ: Arbete (utanför kontrakt)\n"
+                    f"Utförare: {check_in.worker_name}\n"
+                    f"Tid: {_fmt_amount(check_in.hours)} h × "
+                    f"{_fmt_amount(check_in.hourly_rate)} kr/h"
+                )
+                if check_in.note:
+                    detail += f"\nBeskrivning: {check_in.note}"
                 _maybe_create_ata(
                     check_in.project,
                     f"Extra arbete: {check_in.note or check_in.worker_name}",
                     check_in.cost,
+                    detail,
                 )
             _report_logged(
                 check_in.project,
@@ -287,10 +316,17 @@ class MaterialUsageViewSet(viewsets.ModelViewSet):
         if response.data.get("id"):
             usage = MaterialUsage.objects.get(pk=response.data["id"])
             if outside_scope:
+                detail = (
+                    "Typ: Material (utanför kontrakt)\n"
+                    f"Artikel: {usage.description}\n"
+                    f"Mängd: {_fmt_amount(usage.quantity)} {usage.unit} × "
+                    f"{_fmt_amount(usage.unit_cost)} kr/{usage.unit}"
+                )
                 _maybe_create_ata(
                     usage.project,
                     f"Extra material: {usage.description}",
                     usage.cost,
+                    detail,
                 )
             _report_logged(usage.project, f"Material: {usage.description}")
         return response

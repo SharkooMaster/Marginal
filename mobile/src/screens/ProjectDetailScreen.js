@@ -230,6 +230,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
   );
 
   const hasScope = project.scope_items && project.scope_items.length > 0;
+  const hasActuals = Number(project.actual_total) > 0;
 
   const budget = (
     <>
@@ -238,7 +239,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
         Planerad kostnad jämfört med vad som loggats. Grön = inom budget, röd = över.
       </Text>
       <Card>
-        {hasScope ? (
+        {hasScope || hasActuals ? (
           <>
             <BudgetBlock title="Arbete" budget={project.budgeted_labor} actual={project.actual_labor} />
             <BudgetBlock
@@ -253,24 +254,57 @@ export default function ProjectDetailScreen({ route, navigation }) {
               actual={project.actual_total}
               emphasis
             />
-            <View style={styles.divider} />
-            {project.scope_items.map((s) => (
-              <View key={s.id} style={styles.scopeRow}>
-                <View style={{ flex: 1, paddingRight: spacing.md }}>
-                  <Text style={styles.scopeDesc} numberOfLines={1}>
-                    {s.description}
-                  </Text>
-                  <Text style={styles.scopeMeta}>
-                    {s.item_type === "labor" ? "Arbete" : "Material"} · {Number(s.quantity)} {s.unit}
-                  </Text>
-                </View>
-                <Text style={styles.scopeCost}>{formatSek(s.line_total)}</Text>
-              </View>
-            ))}
+            {hasScope ? (
+              <>
+                <View style={styles.divider} />
+                {project.scope_items.map((s) => {
+                  const inner = (
+                    <>
+                      <View style={{ flex: 1, paddingRight: spacing.md }}>
+                        <Text style={styles.scopeDesc} numberOfLines={1}>
+                          {s.description}
+                        </Text>
+                        <Text style={styles.scopeMeta}>
+                          {s.item_type === "labor" ? "Arbete" : "Material"} · {Number(s.quantity)} {s.unit}
+                          {s.is_ata ? " · ÄTA" : ""}
+                        </Text>
+                      </View>
+                      <Text style={styles.scopeCost}>{formatSek(s.line_total)}</Text>
+                      {isManager ? <Text style={styles.scopeEdit}>›</Text> : null}
+                    </>
+                  );
+                  return isManager ? (
+                    <Pressable
+                      key={s.id}
+                      onPress={() =>
+                        navigation.navigate("AddScope", { id: project.id, name: project.name, item: s })
+                      }
+                      style={({ pressed, hovered }) => [
+                        styles.scopeRow,
+                        (pressed || hovered) && styles.scopeRowActive,
+                      ]}
+                    >
+                      {inner}
+                    </Pressable>
+                  ) : (
+                    <View key={s.id} style={styles.scopeRow}>
+                      {inner}
+                    </View>
+                  );
+                })}
+                {isManager ? (
+                  <Text style={styles.scopeEditHint}>Tryck på en budgetpost för att redigera eller ta bort.</Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.scopeHint}>
+                Inga budgetposter ännu – siffrorna ovan visar loggat utfall. Lägg till budget för att jämföra.
+              </Text>
+            )}
           </>
         ) : (
           <Text style={styles.scopeEmpty}>
-            Ingen budget ännu. Lägg till budgetposter för att följa marginal och fånga ÄTA.
+            Ingen budget eller loggat utfall ännu. Lägg till budgetposter för att följa marginal och fånga ÄTA.
           </Text>
         )}
         {isManager ? (
@@ -620,11 +654,15 @@ const styles = StyleSheet.create({
   budgetFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.sm },
   budgetPct: { color: colors.textMuted, fontSize: font.tiny, fontWeight: "700" },
   budgetDiff: { fontSize: font.tiny, fontWeight: "800" },
-  scopeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.sm },
+  scopeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.sm, marginHorizontal: -spacing.sm },
+  scopeRowActive: { backgroundColor: colors.surfaceRaised },
+  scopeEdit: { color: colors.textFaint, fontSize: font.h3, fontWeight: "800", marginLeft: spacing.md },
+  scopeEditHint: { color: colors.textFaint, fontSize: font.tiny, marginTop: spacing.sm },
   scopeDesc: { color: colors.text, fontSize: font.body, fontWeight: "600" },
   scopeMeta: { color: colors.textMuted, fontSize: font.tiny, marginTop: 2 },
   scopeCost: { color: colors.text, fontSize: font.body, fontWeight: "700" },
   scopeEmpty: { color: colors.textMuted, fontSize: font.small, lineHeight: 20 },
+  scopeHint: { color: colors.textFaint, fontSize: font.tiny, lineHeight: 18, marginTop: spacing.md },
   photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
   galleryThumb: { borderRadius: radius.sm, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
   galleryThumbActive: { borderColor: colors.accent },
