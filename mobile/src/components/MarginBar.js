@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { colors, font, radius, spacing } from "../theme";
+import { colors, font, monoFont, radius, spacing } from "../theme";
 
 // Slim gauge of remaining margin relative to revenue.
 export default function MarginBar({ marginPct, atRisk, compact }) {
@@ -41,6 +41,7 @@ const styles = StyleSheet.create({
   },
   pct: {
     fontWeight: "800",
+    fontFamily: monoFont,
     marginRight: spacing.sm,
     letterSpacing: -0.5,
   },

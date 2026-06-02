@@ -4,9 +4,23 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from .models import AtaItem, CheckIn, Customer, MaterialUsage, Project, ScopeItem
+from .auth_views import get_profile
+from .events import trigger_company_event
+from .push import notify_managers
+from .models import (
+    AtaItem,
+    CheckIn,
+    Customer,
+    MaterialUsage,
+    Project,
+    ReportPhoto,
+    ScopeItem,
+    UserProfile,
+)
 from .serializers import (
     AtaItemSerializer,
     CheckInSerializer,
@@ -14,13 +28,33 @@ from .serializers import (
     MaterialUsageSerializer,
     ProjectDetailSerializer,
     ProjectListSerializer,
+    ReportPhotoSerializer,
     ScopeItemSerializer,
 )
 
 
+def _company(user):
+    return get_profile(user).company
+
+
+def _is_manager(user):
+    return get_profile(user).role == UserProfile.Role.MANAGER
+
+
+def _require_manager(user):
+    if not _is_manager(user):
+        raise PermissionDenied("Endast chefer kan göra detta.")
+
+
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+
+    def get_queryset(self):
+        return Customer.objects.filter(company=_company(self.request.user))
+
+    def perform_create(self, serializer):
+        _require_manager(self.request.user)
+        serializer.save(owner=self.request.user, company=_company(self.request.user))
 
 
 def _to_decimal(value, default="0"):
@@ -31,7 +65,18 @@ def _to_decimal(value, default="0"):
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
-    queryset = Project.objects.all().order_by("-created_at")
+    def get_queryset(self):
+        qs = Project.objects.filter(company=_company(self.request.user)).order_by(
+            "-created_at"
+        )
+        # The dashboard lists active projects; the archive page passes
+        # ?archived=true. Detail/update/delete operate on any company project.
+        if self.action == "list":
+            archived = str(self.request.query_params.get("archived", "")).lower() in (
+                "true", "1", "yes",
+            )
+            qs = qs.filter(archived=archived)
+        return qs
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -41,12 +86,18 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Create a project from a customer name (created on the fly) plus
         optional initial scope (budget) lines."""
+        _require_manager(request.user)
+        company = _company(request.user)
         data = request.data
         name = (data.get("name") or "").strip() or "Nytt projekt"
         customer_name = (data.get("customer_name") or "").strip() or "Ny kund"
-        customer, _ = Customer.objects.get_or_create(name=customer_name)
+        customer, _ = Customer.objects.get_or_create(
+            company=company, name=customer_name, defaults={"owner": request.user}
+        )
 
         project = Project.objects.create(
+            company=company,
+            owner=request.user,
             name=name,
             customer=customer,
             status=data.get("status") or Project.Status.PLANNING,
@@ -66,14 +117,83 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 unit_cost=_to_decimal(item.get("unit_cost")),
             )
 
+        trigger_company_event(
+            company.id if company else None,
+            "project.created",
+            {"id": project.id, "name": project.name},
+        )
         return Response(
             ProjectDetailSerializer(project).data, status=status.HTTP_201_CREATED
         )
 
+    def update(self, request, *args, **kwargs):
+        """Edit a project's basics (name, customer, price, threshold)."""
+        _require_manager(request.user)
+        project = self.get_object()
+        data = request.data
+
+        if "name" in data:
+            name = (data.get("name") or "").strip()
+            if name:
+                project.name = name
+        if "customer_name" in data:
+            customer_name = (data.get("customer_name") or "").strip()
+            if customer_name:
+                customer, _ = Customer.objects.get_or_create(
+                    company=_company(request.user),
+                    name=customer_name,
+                    defaults={"owner": request.user},
+                )
+                project.customer = customer
+        if "contract_value" in data:
+            project.contract_value = _to_decimal(data.get("contract_value"))
+        if "margin_alert_threshold_pct" in data:
+            project.margin_alert_threshold_pct = _to_decimal(
+                data.get("margin_alert_threshold_pct"), "10"
+            )
+        if data.get("status"):
+            project.status = data.get("status")
+        if "archived" in data:
+            val = data.get("archived")
+            project.archived = val is True or str(val).lower() in (
+                "true", "1", "yes", "on",
+            )
+
+        project.save()
+        trigger_company_event(
+            project.company_id,
+            "project.updated",
+            {"id": project.id, "name": project.name, "is_at_risk": project.is_at_risk},
+        )
+        return Response(ProjectDetailSerializer(project).data)
+
+    def destroy(self, request, *args, **kwargs):
+        _require_manager(request.user)
+        project = self.get_object()
+        company_id = project.company_id
+        name = project.name
+        response = super().destroy(request, *args, **kwargs)
+        trigger_company_event(company_id, "project.deleted", {"name": name})
+        return response
+
+
+def _require_company_project(user, project_id):
+    project = Project.objects.filter(pk=project_id, company=_company(user)).first()
+    if project is None:
+        raise PermissionDenied("Projektet finns inte eller tillhör inte ditt företag.")
+    return project
+
 
 class ScopeItemViewSet(viewsets.ModelViewSet):
-    queryset = ScopeItem.objects.all()
     serializer_class = ScopeItemSerializer
+
+    def get_queryset(self):
+        return ScopeItem.objects.filter(project__company=_company(self.request.user))
+
+    def perform_create(self, serializer):
+        _require_manager(self.request.user)
+        _require_company_project(self.request.user, self.request.data.get("project"))
+        serializer.save()
 
 
 def _maybe_create_ata(project, title, estimated_cost):
@@ -87,53 +207,107 @@ def _maybe_create_ata(project, title, estimated_cost):
         trigger_type=AtaItem.Trigger.AUTO,
         notify_deadline=(timezone.now() + timedelta(days=7)).date(),
     )
+    trigger_company_event(
+        project.company_id,
+        "ata.detected",
+        {"project_id": project.id, "project": project.name, "title": title},
+    )
+    notify_managers(
+        project.company_id,
+        "Ny ÄTA upptäckt",
+        f"{project.name}: {title}",
+        {"project_id": project.id},
+    )
+
+
+def _report_logged(project, summary):
+    """Notify the company a field report was logged, flagging margin risk."""
+    trigger_company_event(
+        project.company_id,
+        "report.logged",
+        {
+            "project_id": project.id,
+            "project": project.name,
+            "summary": summary,
+            "is_at_risk": project.is_at_risk,
+        },
+    )
+    if project.is_at_risk:
+        notify_managers(
+            project.company_id,
+            "Marginal i fara",
+            f"{project.name} ligger under marginalgränsen.",
+            {"project_id": project.id},
+        )
 
 
 class CheckInViewSet(viewsets.ModelViewSet):
-    queryset = CheckIn.objects.all().order_by("-logged_at")
     serializer_class = CheckInSerializer
 
+    def get_queryset(self):
+        return CheckIn.objects.filter(project__company=_company(self.request.user)).order_by(
+            "-logged_at"
+        )
+
     def create(self, request, *args, **kwargs):
+        _require_company_project(request.user, request.data.get("project"))
         outside_scope = str(request.data.get("outside_scope", "")).lower() in (
             "true", "1", "yes", "on",
         )
         response = super().create(request, *args, **kwargs)
-        if outside_scope and response.data.get("id"):
+        if response.data.get("id"):
             check_in = CheckIn.objects.get(pk=response.data["id"])
-            _maybe_create_ata(
+            if outside_scope:
+                _maybe_create_ata(
+                    check_in.project,
+                    f"Extra arbete: {check_in.note or check_in.worker_name}",
+                    check_in.cost,
+                )
+            _report_logged(
                 check_in.project,
-                f"Extra arbete: {check_in.note or check_in.worker_name}",
-                check_in.cost,
+                f"{check_in.worker_name} loggade {check_in.hours}h",
             )
         return response
 
 
 class MaterialUsageViewSet(viewsets.ModelViewSet):
-    queryset = MaterialUsage.objects.all().order_by("-logged_at")
     serializer_class = MaterialUsageSerializer
 
+    def get_queryset(self):
+        return MaterialUsage.objects.filter(
+            project__company=_company(self.request.user)
+        ).order_by("-logged_at")
+
     def create(self, request, *args, **kwargs):
+        _require_company_project(request.user, request.data.get("project"))
         outside_scope = str(request.data.get("outside_scope", "")).lower() in (
             "true", "1", "yes", "on",
         )
         response = super().create(request, *args, **kwargs)
-        if outside_scope and response.data.get("id"):
+        if response.data.get("id"):
             usage = MaterialUsage.objects.get(pk=response.data["id"])
-            _maybe_create_ata(
-                usage.project,
-                f"Extra material: {usage.description}",
-                usage.cost,
-            )
+            if outside_scope:
+                _maybe_create_ata(
+                    usage.project,
+                    f"Extra material: {usage.description}",
+                    usage.cost,
+                )
+            _report_logged(usage.project, f"Material: {usage.description}")
         return response
 
 
 class AtaItemViewSet(viewsets.ModelViewSet):
-    queryset = AtaItem.objects.all().order_by("-created_at")
     serializer_class = AtaItemSerializer
+
+    def get_queryset(self):
+        return AtaItem.objects.filter(project__company=_company(self.request.user)).order_by(
+            "-created_at"
+        )
 
     @action(detail=True, methods=["post"])
     def advance(self, request, pk=None):
         """Move an ÄTA forward through its approval flow (prototype helper)."""
+        _require_manager(request.user)
         ata = self.get_object()
         flow = [
             AtaItem.Status.DETECTED,
@@ -163,7 +337,46 @@ class AtaItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
+        _require_manager(request.user)
         ata = self.get_object()
         ata.status = AtaItem.Status.REJECTED
         ata.save()
         return Response(AtaItemSerializer(ata).data)
+
+
+class ReportPhotoViewSet(viewsets.ModelViewSet):
+    """Field photos. Workers and managers can upload to company projects."""
+
+    serializer_class = ReportPhotoSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        qs = ReportPhoto.objects.filter(
+            project__company=_company(self.request.user)
+        ).order_by("-created_at")
+        project_id = self.request.query_params.get("project")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        project = _require_company_project(request.user, request.data.get("project"))
+        if not request.data.get("image"):
+            return Response({"detail": "Ingen bild bifogad."}, status=400)
+        photo = ReportPhoto.objects.create(
+            project=project,
+            check_in_id=request.data.get("check_in") or None,
+            material_id=request.data.get("material") or None,
+            image=request.data["image"],
+            caption=(request.data.get("caption") or "")[:300],
+            uploaded_by=request.user,
+        )
+        trigger_company_event(
+            project.company_id,
+            "photo.added",
+            {"project_id": project.id, "project": project.name},
+        )
+        return Response(
+            ReportPhotoSerializer(photo, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )

@@ -6,10 +6,47 @@ Project -> ScopeItems (budget baseline) -> CheckIns / MaterialUsages (actuals)
 """
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 
 
+class Company(models.Model):
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    class Role(models.TextChoices):
+        MANAGER = "manager", "Chef"
+        WORKER = "worker", "Hantverkare"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
+    )
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name="members", null=True, blank=True
+    )
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.MANAGER)
+    full_name = models.CharField(max_length=200, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.role})"
+
+
 class Customer(models.Model):
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name="customers", null=True, blank=True
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="customers",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=200)
     contact_email = models.EmailField(blank=True)
 
@@ -25,6 +62,16 @@ class Project(models.Model):
         COMPLETED = "completed", "Avslutad"
         INVOICED = "invoiced", "Fakturerad"
 
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name="projects", null=True, blank=True
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="projects",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=200)
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name="projects"
@@ -38,6 +85,7 @@ class Project(models.Model):
     margin_alert_threshold_pct = models.DecimalField(
         max_digits=5, decimal_places=2, default=Decimal("10")
     )
+    archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -171,6 +219,44 @@ class MaterialUsage(models.Model):
 
     def __str__(self):
         return f"{self.description} ({self.cost})"
+
+
+class DeviceToken(models.Model):
+    """An Expo push token for a user's device, used for push notifications."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="device_tokens"
+    )
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user_id}:{self.token[:16]}"
+
+
+class ReportPhoto(models.Model):
+    """A photo attached to a project (optionally to a specific check-in or
+    material usage) by a worker reporting from the field."""
+
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name="photos"
+    )
+    check_in = models.ForeignKey(
+        CheckIn, on_delete=models.SET_NULL, related_name="photos", null=True, blank=True
+    )
+    material = models.ForeignKey(
+        MaterialUsage, on_delete=models.SET_NULL, related_name="photos", null=True, blank=True
+    )
+    image = models.ImageField(upload_to="reports/%Y/%m/")
+    caption = models.CharField(max_length=300, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Foto {self.id} – {self.project.name}"
 
 
 class AtaItem(models.Model):

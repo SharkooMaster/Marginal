@@ -1,28 +1,34 @@
 import { Platform } from "react-native";
 
 // Central dark theme. Brand palette is built around the two requested colors,
-// kept as accents over a minimal near-black surface system.
+// over a deep near-black "cyber" surface system with a neon cyan accent.
 export const colors = {
   // Requested brand colors
-  primary: "#5b3fd3",
+  primary: "#6b4bff",
   primaryDeep: "#2b1f63",
-  primarySoft: "rgba(91,63,211,0.14)",
+  primarySoft: "rgba(107,75,255,0.16)",
 
-  // Minimal dark surfaces
-  background: "#0d0b14",
-  surface: "#16131f",
-  surfaceRaised: "#1d1929",
-  border: "#241f33",
-  borderStrong: "#2f2942",
+  // Cyber accent (neon cyan) used for highlights, glow and active states
+  accent: "#34e4ea",
+  accentSoft: "rgba(52,228,234,0.14)",
+
+  // Deep near-black surfaces
+  background: "#070611",
+  backgroundElev: "#0b0a16",
+  surface: "#100e1c",
+  surfaceRaised: "#171527",
+  border: "#211d36",
+  borderStrong: "#2c2745",
+  gridLine: "rgba(124,108,255,0.07)",
 
   // Text
-  text: "#f6f5fb",
-  textMuted: "#9a93b3",
-  textFaint: "#5f5977",
+  text: "#f4f3fb",
+  textMuted: "#928cad",
+  textFaint: "#5a546f",
 
   // Status
-  success: "#43d39a",
-  successSoft: "rgba(67,211,154,0.12)",
+  success: "#3ce0a0",
+  successSoft: "rgba(60,224,160,0.12)",
   warning: "#f0b54b",
   warningSoft: "rgba(240,181,75,0.12)",
   danger: "#f0556b",
@@ -30,6 +36,14 @@ export const colors = {
 
   onPrimary: "#ffffff",
 };
+
+// Monospace stack for KPI numerics (the "cyber" data feel).
+export const monoFont = Platform.select({
+  web: "ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace",
+  ios: "Menlo",
+  android: "monospace",
+  default: "monospace",
+});
 
 export const spacing = {
   xs: 4,
@@ -58,8 +72,9 @@ export const font = {
 };
 
 export const layout = {
-  contentMaxWidth: 1080,
+  contentMaxWidth: 1240,
   formMaxWidth: 560,
+  sidebarWidth: 248,
 };
 
 // Subtle elevation. Uses CSS box-shadow on web, native shadow elsewhere.
@@ -67,15 +82,38 @@ export function shadow(level = 1) {
   if (Platform.OS === "web") {
     const y = level * 6;
     const blur = level * 18;
-    return { boxShadow: `0 ${y}px ${blur}px rgba(0,0,0,0.35)` };
+    return { boxShadow: `0 ${y}px ${blur}px rgba(0,0,0,0.45)` };
   }
   return {
     shadowColor: "#000",
     shadowOffset: { width: 0, height: level * 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: level * 8,
     elevation: level * 3,
   };
+}
+
+// Neon glow effect (web only) for the cyber accent highlights.
+export function glow(color = colors.accent, strength = 0.5) {
+  if (Platform.OS === "web") {
+    return { boxShadow: `0 0 18px ${hexAlpha(color, strength)}` };
+  }
+  return {
+    shadowColor: color,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: strength,
+    shadowRadius: 12,
+    elevation: 6,
+  };
+}
+
+function hexAlpha(hex, alpha) {
+  if (!hex.startsWith("#")) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // Format a number as Swedish kronor, e.g. 185000 -> "185 000 kr".

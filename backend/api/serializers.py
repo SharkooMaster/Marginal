@@ -1,6 +1,34 @@
 from rest_framework import serializers
 
-from .models import AtaItem, CheckIn, Customer, MaterialUsage, Project, ScopeItem
+from .models import (
+    AtaItem,
+    CheckIn,
+    Customer,
+    MaterialUsage,
+    Project,
+    ReportPhoto,
+    ScopeItem,
+)
+
+
+class ReportPhotoSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReportPhoto
+        fields = [
+            "id", "project", "check_in", "material", "image",
+            "caption", "uploaded_by_name", "created_at",
+        ]
+
+    def get_uploaded_by_name(self, obj):
+        if not obj.uploaded_by:
+            return ""
+        profile = getattr(obj.uploaded_by, "profile", None)
+        return (profile.full_name if profile and profile.full_name else "") or (
+            obj.uploaded_by.email or obj.uploaded_by.username
+        )
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -73,7 +101,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "customer_name", "status", "status_display",
             "contract_value", "current_margin", "current_margin_pct",
-            "is_at_risk", "open_ata_count",
+            "is_at_risk", "open_ata_count", "archived",
         ]
 
     def get_open_ata_count(self, obj):
@@ -89,6 +117,7 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
     check_ins = CheckInSerializer(many=True, read_only=True)
     material_usages = MaterialUsageSerializer(many=True, read_only=True)
     ata_items = AtaItemSerializer(many=True, read_only=True)
+    photos = ReportPhotoSerializer(many=True, read_only=True)
 
     budgeted_labor = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
     budgeted_materials = serializers.DecimalField(max_digits=20, decimal_places=2, read_only=True)
@@ -105,9 +134,9 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
         model = Project
         fields = [
             "id", "name", "customer_name", "status", "status_display",
-            "contract_value", "margin_alert_threshold_pct",
+            "contract_value", "margin_alert_threshold_pct", "archived",
             "budgeted_labor", "budgeted_materials", "budgeted_total",
             "actual_labor", "actual_materials", "actual_total",
             "approved_ata", "current_margin", "current_margin_pct", "is_at_risk",
-            "scope_items", "check_ins", "material_usages", "ata_items",
+            "scope_items", "check_ins", "material_usages", "ata_items", "photos",
         ]

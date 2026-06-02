@@ -1,6 +1,16 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useLayoutEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import Screen from "../components/Screen";
 import Card from "../components/Card";
@@ -8,7 +18,9 @@ import Pill from "../components/Pill";
 import MarginBar from "../components/MarginBar";
 import PrimaryButton from "../components/PrimaryButton";
 import { api } from "../api";
-import { colors, font, spacing, formatSek } from "../theme";
+import { useAuth } from "../auth/AuthContext";
+import { useLiveRefresh } from "../live/LiveProvider";
+import { colors, font, radius, spacing, formatSek, shadow } from "../theme";
 import { useResponsive } from "../useResponsive";
 
 function Row({ label, value, tone, strong }) {
@@ -48,8 +60,12 @@ function BudgetBlock({ title, budget, actual }) {
 export default function ProjectDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const { isWide } = useResponsive();
+  const { isManager } = useAuth();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +82,62 @@ export default function ProjectDetailScreen({ route, navigation }) {
       load();
     }, [load])
   );
+  useLiveRefresh(load);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: isManager
+        ? () => (
+            <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.menuTrigger}>
+              <Text style={styles.menuTriggerIcon}>⋮</Text>
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, isManager]);
+
+  const deleteProject = useCallback(async () => {
+    try {
+      setDeleting(true);
+      await api.deleteProject(id);
+      setConfirmOpen(false);
+      navigation.navigate("Projects");
+    } catch (e) {
+      const msg = "Kunde inte ta bort projektet: " + e.message;
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Fel", msg);
+    } finally {
+      setDeleting(false);
+    }
+  }, [id, navigation]);
+
+  function openConfirm() {
+    setMenuOpen(false);
+    setConfirmOpen(true);
+  }
+
+  function openEdit() {
+    setMenuOpen(false);
+    navigation.navigate("EditProject", {
+      id: project.id,
+      name: project.name,
+      customer_name: project.customer_name,
+      contract_value: project.contract_value,
+      margin_alert_threshold_pct: project.margin_alert_threshold_pct,
+    });
+  }
+
+  async function toggleArchive() {
+    setMenuOpen(false);
+    try {
+      await api.setArchived(id, !project.archived);
+      navigation.goBack();
+    } catch (e) {
+      const msg = "Kunde inte uppdatera arkivstatus: " + e.message;
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Fel", msg);
+    }
+  }
 
   if (loading || !project) {
     return (
@@ -138,21 +210,40 @@ export default function ProjectDetailScreen({ route, navigation }) {
             Ingen budget ännu. Lägg till budgetposter för att följa marginal och fånga ÄTA.
           </Text>
         )}
-        <View style={{ height: spacing.md }} />
-        <PrimaryButton
-          title="+ Lägg till budgetpost"
-          variant="ghost"
-          onPress={() => navigation.navigate("AddScope", { id: project.id, name: project.name })}
-        />
+        {isManager ? (
+          <>
+            <View style={{ height: spacing.md }} />
+            <PrimaryButton
+              title="+ Lägg till budgetpost"
+              variant="ghost"
+              onPress={() => navigation.navigate("AddScope", { id: project.id, name: project.name })}
+            />
+          </>
+        ) : null}
       </Card>
     </>
   );
 
+  const photoList = project.photos || [];
+  const photos =
+    photoList.length > 0 ? (
+      <>
+        <Text style={styles.sectionTitle}>Foton ({photoList.length})</Text>
+        <Card>
+          <View style={styles.photoGrid}>
+            {photoList.map((p) => (
+              <Image key={p.id} source={{ uri: p.image }} style={styles.galleryImg} />
+            ))}
+          </View>
+        </Card>
+      </>
+    ) : null;
+
   const actions = (
     <Card>
       <PrimaryButton
-        title="Logga arbete / material"
-        onPress={() => navigation.navigate("LogWork", { id: project.id, name: project.name })}
+        title="Rapportera tid / material"
+        onPress={() => navigation.navigate("Report", { id: project.id, name: project.name })}
       />
       <View style={{ height: spacing.md }} />
       <PrimaryButton
@@ -179,6 +270,75 @@ export default function ProjectDetailScreen({ route, navigation }) {
       </>
     ) : null;
 
+  const menu = (
+    <Modal
+      transparent
+      visible={menuOpen}
+      animationType="fade"
+      onRequestClose={() => setMenuOpen(false)}
+    >
+      <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
+        <View style={styles.menu}>
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+            onPress={openEdit}
+          >
+            <Text style={styles.menuItemText}>Redigera projekt</Text>
+          </Pressable>
+          <View style={styles.menuDivider} />
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+            onPress={toggleArchive}
+          >
+            <Text style={styles.menuItemText}>
+              {project.archived ? "Återställ från arkiv" : "Arkivera projekt"}
+            </Text>
+          </Pressable>
+          <View style={styles.menuDivider} />
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+            onPress={openConfirm}
+          >
+            <Text style={styles.menuItemDanger}>Ta bort projekt</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  const confirm = (
+    <Modal
+      transparent
+      visible={confirmOpen}
+      animationType="fade"
+      onRequestClose={() => !deleting && setConfirmOpen(false)}
+    >
+      <Pressable
+        style={styles.confirmOverlay}
+        onPress={() => !deleting && setConfirmOpen(false)}
+      >
+        <Pressable style={styles.confirmCard} onPress={() => {}}>
+          <Text style={styles.confirmTitle}>Ta bort projekt?</Text>
+          <Text style={styles.confirmText}>
+            Detta tar bort “{project.name}” permanent, inklusive budget, loggar och ÄTA. Det går inte att ångra.
+          </Text>
+          <View style={styles.confirmActions}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton
+                title="Avbryt"
+                variant="ghost"
+                onPress={() => setConfirmOpen(false)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton title="Ta bort" variant="danger" onPress={deleteProject} loading={deleting} />
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
   if (isWide) {
     return (
       <Screen>
@@ -186,12 +346,15 @@ export default function ProjectDetailScreen({ route, navigation }) {
           <View style={styles.colMain}>
             {overview}
             {budget}
+            {photos}
           </View>
           <View style={styles.colSide}>
             {actions}
             {ata}
           </View>
         </View>
+        {menu}
+        {confirm}
       </Screen>
     );
   }
@@ -200,14 +363,54 @@ export default function ProjectDetailScreen({ route, navigation }) {
     <Screen>
       {overview}
       {budget}
+      {photos}
       {ata}
       <View style={{ marginTop: spacing.lg }}>{actions}</View>
+      {menu}
+      {confirm}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  menuTrigger: { paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  menuTriggerIcon: { color: colors.text, fontSize: 24, fontWeight: "800", lineHeight: 24 },
+  menuOverlay: { flex: 1, alignItems: "flex-end", paddingTop: Platform.OS === "web" ? 56 : 90, paddingRight: spacing.md },
+  menu: {
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.xs,
+    minWidth: 200,
+    ...shadow(2),
+  },
+  menuItem: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: radius.sm },
+  menuItemPressed: { backgroundColor: colors.surface },
+  menuItemText: { color: colors.text, fontSize: font.body, fontWeight: "600" },
+  menuItemDanger: { color: colors.danger, fontSize: font.body, fontWeight: "700" },
+  menuDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  confirmCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    ...shadow(3),
+  },
+  confirmTitle: { color: colors.text, fontSize: font.h2, fontWeight: "800", letterSpacing: -0.3 },
+  confirmText: { color: colors.textMuted, fontSize: font.body, lineHeight: 22, marginTop: spacing.md },
+  confirmActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xl },
   twoCol: { flexDirection: "row", gap: spacing.xl, alignItems: "flex-start" },
   colMain: { flex: 1.4 },
   colSide: { flex: 1, minWidth: 300 },
@@ -236,6 +439,8 @@ const styles = StyleSheet.create({
   scopeMeta: { color: colors.textMuted, fontSize: font.tiny, marginTop: 2 },
   scopeCost: { color: colors.text, fontSize: font.body, fontWeight: "700" },
   scopeEmpty: { color: colors.textMuted, fontSize: font.small, lineHeight: 20 },
+  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  galleryImg: { width: 96, height: 96, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
   ataCard: { borderColor: colors.warningSoft, marginBottom: spacing.md },
   ataTitle: { color: colors.text, fontSize: font.body, fontWeight: "700", flex: 1, paddingRight: spacing.md },
   ataCost: { color: colors.warning, fontSize: font.h3, fontWeight: "800", marginTop: spacing.sm },

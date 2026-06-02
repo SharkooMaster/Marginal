@@ -1,4 +1,6 @@
 """Django settings for the Marginal prototype."""
+import os
+from datetime import timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -66,6 +68,8 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -73,7 +77,27 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+SIMPLE_JWT = {
+    # Long-lived tokens so the user stays signed in; the app also refreshes.
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
 }
 
 # Prototype: allow the Expo app to call the API from any origin.
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Pusher (live updates). Prefer environment variables; the values below are a
+# local-prototype fallback. NOTE: PUSHER_SECRET is sensitive — move it to an
+# environment variable / secret manager before sharing or deploying this repo.
+PUSHER_APP_ID = os.environ.get("PUSHER_APP_ID", "2161800")
+PUSHER_KEY = os.environ.get("PUSHER_KEY", "6059d8df3fbc04bd96e8")
+PUSHER_SECRET = os.environ.get("PUSHER_SECRET", "d177525822fc369688fb")
+PUSHER_CLUSTER = os.environ.get("PUSHER_CLUSTER", "eu")

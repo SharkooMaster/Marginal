@@ -5,14 +5,15 @@ import { colors, font, radius, spacing } from "../theme";
 
 export default function PrimaryButton({ title, onPress, loading, variant = "primary", style }) {
   const isGhost = variant === "ghost";
+  const isDanger = variant === "danger";
   return (
     <Pressable
       onPress={onPress}
       disabled={loading}
       style={({ pressed, hovered }) => [
         styles.base,
-        isGhost ? styles.ghost : styles.primary,
-        hovered && (isGhost ? styles.ghostHover : styles.primaryHover),
+        isGhost ? styles.ghost : isDanger ? styles.danger : styles.primary,
+        hovered && (isGhost ? styles.ghostHover : isDanger ? styles.dangerHover : styles.primaryHover),
         pressed && { opacity: 0.88 },
         style,
       ]}
@@ -37,6 +38,8 @@ const styles = StyleSheet.create({
   },
   primary: { backgroundColor: colors.primary },
   primaryHover: { backgroundColor: "#6b50e0" },
+  danger: { backgroundColor: colors.danger },
+  dangerHover: { backgroundColor: "#e0584f" },
   ghost: {
     backgroundColor: "transparent",
     borderWidth: 1,

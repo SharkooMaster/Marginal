@@ -1,19 +1,21 @@
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import Screen from "../components/Screen";
 import Card from "../components/Card";
 import Pill from "../components/Pill";
-import StatCard from "../components/StatCard";
 import MarginBar from "../components/MarginBar";
 import PrimaryButton from "../components/PrimaryButton";
 import { api } from "../api";
+import { useAuth } from "../auth/AuthContext";
+import { useLiveRefresh } from "../live/LiveProvider";
 import { colors, font, spacing, formatSek } from "../theme";
 import { useResponsive } from "../useResponsive";
 
 export default function ProjectsScreen({ navigation }) {
-  const { columns, width, isCompact } = useResponsive();
+  const { columns, isCompact } = useResponsive();
+  const { isManager } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,6 +37,7 @@ export default function ProjectsScreen({ navigation }) {
       load();
     }, [load])
   );
+  useLiveRefresh(load);
 
   if (loading) {
     return (
@@ -44,28 +47,22 @@ export default function ProjectsScreen({ navigation }) {
     );
   }
 
-  const num = (v) => Number(v) || 0;
-  const totalContract = projects.reduce((s, p) => s + num(p.contract_value), 0);
-  const totalMargin = projects.reduce((s, p) => s + num(p.current_margin), 0);
-  const portfolioPct = totalContract > 0 ? (totalMargin / totalContract) * 100 : 0;
-  const atRiskCount = projects.filter((p) => p.is_at_risk).length;
-  const openAta = projects.reduce((s, p) => s + num(p.open_ata_count), 0);
-
   const cardWidth =
     columns === 1 ? "100%" : `calc((100% - ${(columns - 1) * spacing.lg}px) / ${columns})`;
-  const statCols = width >= 760 ? 4 : 2;
-  const statWidth = `calc((100% - ${(statCols - 1) * spacing.md}px) / ${statCols})`;
 
   return (
     <Screen onRefresh={load} refreshing={loading}>
-      <Text style={styles.title}>Översikt</Text>
-      <Text style={styles.sub}>Din projektportfölj i realtid</Text>
-
-      {isCompact ? (
-        <View style={{ marginTop: spacing.lg }}>
-          <PrimaryButton title="+ Nytt projekt" onPress={() => navigation.navigate("NewProject")} />
+      <View style={[styles.sectionHeader, isCompact && styles.sectionHeaderCompact]}>
+        <View>
+          <Text style={styles.kicker}>Portfölj</Text>
+          <Text style={styles.title}>Projekt</Text>
         </View>
-      ) : null}
+        {isManager && projects.length > 0 ? (
+          <Pressable onPress={() => navigation.navigate("NewProject")} hitSlop={8}>
+            <Text style={styles.addLink}>+ Nytt projekt</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       {error ? (
         <Card style={styles.errorCard}>
@@ -77,45 +74,19 @@ export default function ProjectsScreen({ navigation }) {
         </Card>
       ) : null}
 
-      <View style={[styles.statRow, { marginTop: spacing.xl }]}>
-        <View style={{ width: statWidth }}>
-          <StatCard label="Kontraktsvärde" value={formatSek(totalContract)} sub={`${projects.length} projekt`} />
-        </View>
-        <View style={{ width: statWidth }}>
-          <StatCard
-            label="Marginal kvar"
-            value={formatSek(totalMargin)}
-            tone={totalMargin >= 0 ? colors.success : colors.danger}
-          />
-        </View>
-        <View style={{ width: statWidth }}>
-          <StatCard
-            label="Portföljmarginal"
-            value={`${portfolioPct.toFixed(1)}%`}
-            tone={atRiskCount > 0 ? colors.warning : colors.success}
-          />
-        </View>
-        <View style={{ width: statWidth }}>
-          <StatCard
-            label="Kräver åtgärd"
-            value={`${atRiskCount}`}
-            sub={openAta > 0 ? `${openAta} öppna ÄTA` : "Inga öppna ÄTA"}
-            tone={atRiskCount > 0 ? colors.danger : colors.text}
-          />
-        </View>
-      </View>
-
-      <Text style={styles.sectionTitle}>Projekt</Text>
-
       {projects.length === 0 && !error ? (
         <Card style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Inga projekt ännu</Text>
           <Text style={styles.emptyText}>
-            Skapa ditt första projekt, lägg till budgetposter och börja följa marginalen i realtid.
+            {isManager
+              ? "Skapa ditt första projekt, lägg till budgetposter och börja följa marginalen i realtid."
+              : "Din chef lägger till projekt som du kan rapportera på."}
           </Text>
-          <View style={{ width: "100%" }}>
-            <PrimaryButton title="+ Skapa projekt" onPress={() => navigation.navigate("NewProject")} />
-          </View>
+          {isManager ? (
+            <View style={{ width: "100%" }}>
+              <PrimaryButton title="+ Skapa projekt" onPress={() => navigation.navigate("NewProject")} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -157,17 +128,29 @@ export default function ProjectsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
-  title: { color: colors.text, fontSize: font.display, fontWeight: "800", letterSpacing: -0.5 },
+  kicker: { color: colors.accent, fontSize: font.tiny, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" },
+  title: { color: colors.text, fontSize: font.display, fontWeight: "800", letterSpacing: -0.5, marginTop: 4 },
   sub: { color: colors.textMuted, fontSize: font.body, marginTop: 4 },
-  statRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  sectionHeaderCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: spacing.md,
+  },
   sectionTitle: {
     color: colors.text,
     fontSize: font.h2,
     fontWeight: "700",
     letterSpacing: -0.3,
-    marginTop: spacing.xxl,
-    marginBottom: spacing.md,
   },
+  sectionActions: { flexDirection: "row", alignItems: "center", gap: spacing.lg },
+  addLink: { color: colors.primary, fontSize: font.small, fontWeight: "800" },
+  mutedLink: { color: colors.textMuted, fontSize: font.small, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
   cardTop: { flexDirection: "row", alignItems: "flex-start" },
   name: { color: colors.text, fontSize: font.h3, fontWeight: "700" },

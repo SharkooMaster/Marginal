@@ -16,6 +16,7 @@ export default function Pill({ label, tone = "neutral" }) {
 const TONES = {
   neutral: { bg: colors.surfaceRaised, fg: colors.textMuted, dot: false },
   brand: { bg: colors.primarySoft, fg: "#b6a6f5", dot: true },
+  accent: { bg: colors.accentSoft, fg: colors.accent, dot: true },
   success: { bg: colors.successSoft, fg: colors.success, dot: true },
   warning: { bg: colors.warningSoft, fg: colors.warning, dot: true },
   danger: { bg: colors.dangerSoft, fg: colors.danger, dot: true },

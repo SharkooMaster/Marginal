@@ -10,4 +10,12 @@
 // NOTE: backend runs on 8200 because 8000 was already occupied. To be reachable
 // from an external network the Django server must bind to 0.0.0.0:8200 and the
 // router/firewall must forward TCP 8200 to this machine.
-export const API_BASE_URL = "http://92.34.179.144:8200/api";
+// LAN testing (phone + desktop on the same Wi-Fi). 192.168.2.21 is this machine:
+export const API_BASE_URL = "http://192.168.2.21:8000/api";
+
+// Pusher (live updates). Leave PUSHER_KEY empty to disable; the app then relies
+// on pull-to-refresh. Set the same key/cluster as the backend PUSHER_* env.
+export const PUSHER_KEY = "6059d8df3fbc04bd96e8";
+export const PUSHER_CLUSTER = "eu";
+// Same machine only:           http://127.0.0.1:8000/api
+// Team / external config:      http://92.34.179.144:8200/api
