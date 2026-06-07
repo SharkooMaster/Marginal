@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "./config";
@@ -125,6 +126,52 @@ export const auth = {
   me: () => request("/auth/me/"),
 };
 
+// Downloads the invoice-basis PDF for a project. On web it triggers a browser
+// download; on native it saves to cache and opens the share sheet.
+async function downloadInvoice(projectId, projectName) {
+  const path = `/projects/${projectId}/invoice/`;
+  const url = `${API_BASE_URL}${path}`;
+  const safeName = `Fakturaunderlag-${(projectName || projectId)
+    .toString()
+    .replace(/[^\w\-åäöÅÄÖ ]+/g, "")
+    .trim() || projectId}.pdf`;
+
+  if (Platform.OS === "web") {
+    let res = await rawRequest(path, { method: "GET" });
+    if (res.status === 401 && (await tryRefresh())) {
+      res = await rawRequest(path, { method: "GET" });
+    }
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    return;
+  }
+
+  const FileSystem = await import("expo-file-system/legacy");
+  const Sharing = await import("expo-sharing");
+  const dest = `${FileSystem.cacheDirectory}${safeName}`;
+  const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  let result = await FileSystem.downloadAsync(url, dest, { headers });
+  if (result.status === 401 && (await tryRefresh())) {
+    result = await FileSystem.downloadAsync(url, dest, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  }
+  if (result.status !== 200) {
+    throw new Error(`Kunde inte hämta underlaget (${result.status}).`);
+  }
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(result.uri, { mimeType: "application/pdf" });
+  }
+}
+
 export const api = {
   listProjects: ({ archived = false } = {}) =>
     request(`/projects/?archived=${archived ? "true" : "false"}`),
@@ -152,10 +199,18 @@ export const api = {
     request("/material-usages/", { method: "POST", body: JSON.stringify(data) }),
 
   listAta: () => request("/ata-items/"),
+  createAta: (data) =>
+    request("/ata-items/", { method: "POST", body: JSON.stringify(data) }),
+  updateAta: (id, data) =>
+    request(`/ata-items/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteAta: (id) => request(`/ata-items/${id}/`, { method: "DELETE" }),
   advanceAta: (id) =>
     request(`/ata-items/${id}/advance/`, { method: "POST", body: "{}" }),
   rejectAta: (id) =>
     request(`/ata-items/${id}/reject/`, { method: "POST", body: "{}" }),
+
+  downloadInvoice: (projectId, projectName) =>
+    downloadInvoice(projectId, projectName),
 
   listTeam: () => request("/auth/team/"),
   addMember: (data) =>

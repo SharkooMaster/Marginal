@@ -14,6 +14,8 @@ function bannerFor(event, data) {
       return { text: `${data.summary || "Ny rapport"} · ${data.project || ""}`, tone: data.is_at_risk ? "danger" : "accent" };
     case "ata.detected":
       return { text: `Ny ÄTA upptäckt: ${data.title || ""} (${data.project || ""})`, tone: "warning" };
+    case "ata.updated":
+      return { text: `ÄTA uppdaterad`, tone: "accent" };
     case "project.updated":
       return { text: `Projekt uppdaterat: ${data.name || ""}`, tone: "accent" };
     case "project.created":
@@ -32,6 +34,7 @@ function bannerFor(event, data) {
 const EVENTS = [
   "report.logged",
   "ata.detected",
+  "ata.updated",
   "project.updated",
   "project.created",
   "project.deleted",

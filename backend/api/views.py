@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -10,6 +11,7 @@ from rest_framework.response import Response
 
 from .auth_views import get_profile
 from .events import trigger_company_event
+from .invoice import build_invoice_pdf
 from .push import notify_managers
 from .models import (
     AtaItem,
@@ -176,6 +178,18 @@ class ProjectViewSet(viewsets.ModelViewSet):
         trigger_company_event(company_id, "project.deleted", {"name": name})
         return response
 
+    @action(detail=True, methods=["get"], url_path="invoice")
+    def invoice(self, request, pk=None):
+        """Return a PDF invoice basis (contract + approved ÄTA + moms)."""
+        _require_manager(request.user)
+        project = self.get_object()
+        pdf = build_invoice_pdf(project)
+        resp = HttpResponse(pdf, content_type="application/pdf")
+        resp["Content-Disposition"] = (
+            f'inline; filename="fakturaunderlag-{project.id}.pdf"'
+        )
+        return resp
+
 
 def _require_company_project(user, project_id):
     project = Project.objects.filter(pk=project_id, company=_company(user)).first()
@@ -215,10 +229,13 @@ def _fmt_amount(value):
     return f"{f:.2f}".rstrip("0").rstrip(".")
 
 
-def _maybe_create_ata(project, title, estimated_cost, description=None):
-    """Auto-create a 'detected' ÄTA for out-of-scope work."""
+def _maybe_create_ata(project, title, estimated_cost, description=None, check_in=None, material=None):
+    """Auto-create a 'detected' ÄTA for out-of-scope work, linked to the field
+    report that triggered it so a rejection can drop the cost from actuals."""
     AtaItem.objects.create(
         project=project,
+        check_in=check_in,
+        material=material,
         title=title,
         description=description
         or "Automatiskt flaggat: arbete loggat utanför ursprunglig kontraktsomfattning.",
@@ -286,11 +303,15 @@ class CheckInViewSet(viewsets.ModelViewSet):
                 )
                 if check_in.note:
                     detail += f"\nBeskrivning: {check_in.note}"
+                work_label = (check_in.note or "").strip() or (
+                    f"Arbete – {check_in.worker_name}"
+                )
                 _maybe_create_ata(
                     check_in.project,
-                    f"Extra arbete: {check_in.note or check_in.worker_name}",
+                    work_label,
                     check_in.cost,
                     detail,
+                    check_in=check_in,
                 )
             _report_logged(
                 check_in.project,
@@ -324,9 +345,10 @@ class MaterialUsageViewSet(viewsets.ModelViewSet):
                 )
                 _maybe_create_ata(
                     usage.project,
-                    f"Extra material: {usage.description}",
+                    (usage.description or "Material").strip(),
                     usage.cost,
                     detail,
+                    material=usage,
                 )
             _report_logged(usage.project, f"Material: {usage.description}")
         return response
@@ -338,6 +360,37 @@ class AtaItemViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return AtaItem.objects.filter(project__company=_company(self.request.user)).order_by(
             "-created_at"
+        )
+
+    def perform_create(self, serializer):
+        """Managers can register an ÄTA by hand (e.g. work not auto-detected)."""
+        _require_manager(self.request.user)
+        project = _require_company_project(
+            self.request.user, self.request.data.get("project")
+        )
+        ata = serializer.save(trigger_type=AtaItem.Trigger.MANUAL)
+        trigger_company_event(
+            project.company_id,
+            "ata.updated",
+            {"project_id": project.id, "status": ata.status},
+        )
+
+    def perform_update(self, serializer):
+        _require_manager(self.request.user)
+        ata = serializer.save()
+        trigger_company_event(
+            ata.project.company_id,
+            "ata.updated",
+            {"project_id": ata.project_id, "status": ata.status},
+        )
+
+    def perform_destroy(self, instance):
+        _require_manager(self.request.user)
+        project_id = instance.project_id
+        company_id = instance.project.company_id
+        instance.delete()
+        trigger_company_event(
+            company_id, "ata.updated", {"project_id": project_id}
         )
 
     @action(detail=True, methods=["post"])
@@ -369,6 +422,11 @@ class AtaItemViewSet(viewsets.ModelViewSet):
                         is_ata=True,
                         ata_approved=True,
                     )
+                trigger_company_event(
+                    ata.project.company_id,
+                    "ata.updated",
+                    {"project_id": ata.project_id, "status": ata.status},
+                )
         return Response(AtaItemSerializer(ata).data)
 
     @action(detail=True, methods=["post"])
@@ -377,6 +435,11 @@ class AtaItemViewSet(viewsets.ModelViewSet):
         ata = self.get_object()
         ata.status = AtaItem.Status.REJECTED
         ata.save()
+        trigger_company_event(
+            ata.project.company_id,
+            "ata.updated",
+            {"project_id": ata.project_id, "status": ata.status},
+        )
         return Response(AtaItemSerializer(ata).data)
 
 

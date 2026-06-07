@@ -11,7 +11,6 @@ import { useResponsive } from "../useResponsive";
 
 import OverviewScreen from "../screens/OverviewScreen";
 import ProjectsScreen from "../screens/ProjectsScreen";
-import AnalyticsScreen from "../screens/AnalyticsScreen";
 import TeamScreen from "../screens/TeamScreen";
 import ArchiveScreen from "../screens/ArchiveScreen";
 import WorkerHomeScreen from "../screens/WorkerHomeScreen";
@@ -19,7 +18,6 @@ import ProjectDetailScreen from "../screens/ProjectDetailScreen";
 import NewProjectScreen from "../screens/NewProjectScreen";
 import EditProjectScreen from "../screens/EditProjectScreen";
 import AddScopeScreen from "../screens/AddScopeScreen";
-import LogWorkScreen from "../screens/LogWorkScreen";
 import ReportScreen from "../screens/ReportScreen";
 import AtaScreen from "../screens/AtaScreen";
 
@@ -46,7 +44,6 @@ function detailScreens() {
       <Stack.Screen name="NewProject" component={NewProjectScreen} options={{ title: "Nytt projekt" }} />
       <Stack.Screen name="EditProject" component={EditProjectScreen} options={{ title: "Redigera projekt" }} />
       <Stack.Screen name="AddScope" component={AddScopeScreen} options={{ title: "Budgetpost" }} />
-      <Stack.Screen name="LogWork" component={LogWorkScreen} options={{ title: "Logga arbete" }} />
       <Stack.Screen name="Report" component={ReportScreen} options={{ title: "Rapportera" }} />
       <Stack.Screen name="Ata" component={AtaScreen} options={{ title: "ÄTA" }} />
     </>
@@ -86,7 +83,6 @@ function makeStack(rootName, rootComponent, rootTitle) {
 
 const OverviewStack = makeStack("OverviewMain", OverviewScreen, "Översikt");
 const ProjectsStack = makeStack("ProjectsMain", ProjectsScreen, "Projekt");
-const AnalyticsStack = makeStack("AnalyticsMain", AnalyticsScreen, "Analys");
 const TeamStack = makeStack("TeamMain", TeamScreen, "Team");
 const ArchiveStack = makeStack("ArchiveMain", ArchiveScreen, "Arkiv");
 const WorkerHomeStack = makeStack("WorkerHomeMain", WorkerHomeScreen, "Hem");
@@ -94,7 +90,6 @@ const WorkerHomeStack = makeStack("WorkerHomeMain", WorkerHomeScreen, "Hem");
 const MANAGER_TABS = [
   { name: "Overview", title: "Översikt", icon: "grid-outline", component: OverviewStack },
   { name: "Projects", title: "Projekt", icon: "albums-outline", component: ProjectsStack },
-  { name: "Analytics", title: "Analys", icon: "stats-chart-outline", component: AnalyticsStack },
   { name: "Team", title: "Team", icon: "people-outline", component: TeamStack },
   { name: "Archive", title: "Arkiv", icon: "archive-outline", component: ArchiveStack },
 ];
@@ -102,7 +97,6 @@ const MANAGER_TABS = [
 const WORKER_TABS = [
   { name: "Home", title: "Hem", icon: "home-outline", component: WorkerHomeStack },
   { name: "Projects", title: "Projekt", icon: "albums-outline", component: ProjectsStack },
-  { name: "Archive", title: "Arkiv", icon: "archive-outline", component: ArchiveStack },
 ];
 
 export default function AppShell() {

@@ -151,7 +151,12 @@ export default function ProjectsScreen({ navigation }) {
                   </Text>
                   <Text style={styles.customer}>{item.customer_name}</Text>
                 </View>
-                <Pill label={item.is_at_risk ? "Risk" : "OK"} tone={item.is_at_risk ? "danger" : "success"} />
+                {(() => {
+                  const pct = Number(item.current_margin_pct) || 0;
+                  if (item.is_at_risk) return <Pill label="Risk" tone="danger" />;
+                  if (pct < 25) return <Pill label="Bevaka" tone="warning" />;
+                  return <Pill label="Frisk" tone="success" />;
+                })()}
               </View>
 
               <View style={styles.barWrap}>

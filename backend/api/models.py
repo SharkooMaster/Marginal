@@ -111,6 +111,8 @@ class Project(models.Model):
     def actual_labor(self):
         total = Decimal("0")
         for c in self.check_ins.all():
+            if c.is_rejected_ata:
+                continue
             total += c.cost
         return total
 
@@ -118,6 +120,8 @@ class Project(models.Model):
     def actual_materials(self):
         total = Decimal("0")
         for m in self.material_usages.all():
+            if m.is_rejected_ata:
+                continue
             total += m.cost
         return total
 
@@ -197,6 +201,12 @@ class CheckIn(models.Model):
     def cost(self):
         return self.hours * self.hourly_rate
 
+    @property
+    def is_rejected_ata(self):
+        """True when this entry was logged as out-of-scope and its ÄTA was
+        rejected, so its cost must not count toward the project's actuals."""
+        return self.source_atas.filter(status=AtaItem.Status.REJECTED).exists()
+
     def __str__(self):
         return f"{self.worker_name} – {self.hours}h"
 
@@ -216,6 +226,12 @@ class MaterialUsage(models.Model):
     @property
     def cost(self):
         return self.quantity * self.unit_cost
+
+    @property
+    def is_rejected_ata(self):
+        """True when this entry was logged as out-of-scope and its ÄTA was
+        rejected, so its cost must not count toward the project's actuals."""
+        return self.source_atas.filter(status=AtaItem.Status.REJECTED).exists()
 
     def __str__(self):
         return f"{self.description} ({self.cost})"
@@ -276,6 +292,14 @@ class AtaItem(models.Model):
 
     project = models.ForeignKey(
         Project, on_delete=models.CASCADE, related_name="ata_items"
+    )
+    # The field report that triggered an auto-detected ÄTA. When the ÄTA is
+    # rejected, this lets us drop the logged cost from the project's actuals.
+    check_in = models.ForeignKey(
+        CheckIn, on_delete=models.CASCADE, related_name="source_atas", null=True, blank=True
+    )
+    material = models.ForeignKey(
+        MaterialUsage, on_delete=models.CASCADE, related_name="source_atas", null=True, blank=True
     )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)

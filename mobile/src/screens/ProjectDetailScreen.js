@@ -96,6 +96,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
   const [viewerIndex, setViewerIndex] = useState(null);
   const [photoConfirm, setPhotoConfirm] = useState(false);
   const [photoDeleting, setPhotoDeleting] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -189,6 +190,19 @@ export default function ProjectDetailScreen({ route, navigation }) {
       else Alert.alert("Fel", msg);
     } finally {
       setPhotoDeleting(false);
+    }
+  }
+
+  async function downloadInvoice() {
+    try {
+      setInvoiceBusy(true);
+      await api.downloadInvoice(project.id, project.name);
+    } catch (e) {
+      const msg = "Kunde inte skapa fakturaunderlag: " + e.message;
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Fel", msg);
+    } finally {
+      setInvoiceBusy(false);
     }
   }
 
@@ -360,6 +374,17 @@ export default function ProjectDetailScreen({ route, navigation }) {
         variant="ghost"
         onPress={() => navigation.navigate("Ata", { id: project.id, name: project.name })}
       />
+      {isManager ? (
+        <>
+          <View style={{ height: spacing.md }} />
+          <PrimaryButton
+            title="Fakturaunderlag (PDF)"
+            variant="ghost"
+            loading={invoiceBusy}
+            onPress={downloadInvoice}
+          />
+        </>
+      ) : null}
     </Card>
   );
 
